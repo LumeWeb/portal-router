@@ -270,7 +270,7 @@ func TestGetGroupRouter(t *testing.T) {
 		subRouter, err := gRouter.Group("/test")
 		require.NoError(t, err)
 
-		result := GetGroupRouter(subRouter)
+		result := GetGroupRouter(Router(subRouter))
 		assert.NotNil(t, result)
 
 		// Verify group functionality by registering a route

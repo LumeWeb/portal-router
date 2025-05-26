@@ -2,7 +2,6 @@ package router
 
 import (
 	"fmt"
-	"github.com/gorilla/mux"
 	"net/http"
 	"strings"
 
@@ -19,11 +18,11 @@ const (
 	SwaggerYAMLPath = "/swagger.yaml" // Default path for YAML OpenAPI spec
 )
 
-type Router = *swagger.Router[echo.HandlerFunc, es.Route]
+type Router = *swagger.Router[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]
 
 // GetRouter returns the underlying echo.Echo from a router.Router
 func GetRouter(r Router) *echo.Echo {
-	return swagger.GetRouter[*echo.Echo, echo.HandlerFunc, es.Route](r.Router())
+	return swagger.GetRouter[*echo.Echo, echo.HandlerFunc, echo.MiddlewareFunc, es.Route](r.Router())
 }
 
 // GetGroupRouter returns the underlying echo.Group from a router.Router if it is a group
@@ -89,29 +88,38 @@ type RouteDefinition struct {
 	Middlewares []echo.MiddlewareFunc
 }
 
-// RegisterRoutes registers a slice of RouteDefinitions with the provided Mux and gswagger routers.
-// It applies common middleware and specific middleware based on the RouteDefinition flags.
-// It also registers access control for the route.
+// RegisterRoutes registers a slice of RouteDefinitions with the provided Router.
+// It registers routes with both the router and swagger documentation.
+// It also registers access control for protected routes if an access service is provided.
 func RegisterRoutes(
 	gRouter Router,
 	accessSvc core.AccessService,
 	subdomain string,
 	routes []RouteDefinition,
-	commonMiddleware ...mux.MiddlewareFunc,
+	commonMiddleware ...echo.MiddlewareFunc,
 ) error {
-
-	echoRouter := GetRouter(gRouter)
+	// Create a group with common middleware if any exist
+	var group Router = gRouter
+	if len(commonMiddleware) > 0 {
+		var err error
+		group, err = gRouter.Group("")
+		if err != nil {
+			return fmt.Errorf("failed to create route group: %w", err)
+		}
+		group.Use(commonMiddleware...)
+	}
 
 	for _, route := range routes {
-		// Create the Echo route
-		echoRouter.Add(route.Method, route.Path, route.Handler, route.Middlewares...)
-
-		// Register with gswagger
-		// Since gRouter is typed with gs.HandlerFunc (which is http.HandlerFunc),
-		// the direct assignment works.
-		_, err := gRouter.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
+		// Register with router and swagger using route-specific middleware
+		_, err := group.AddRoute(
+			route.Method,
+			route.Path,
+			route.Handler,
+			route.Swagger,
+			route.Middlewares...,
+		)
 		if err != nil {
-			return fmt.Errorf("failed to register swagger for route %s %s: %w", route.Method, route.Path, err)
+			return fmt.Errorf("failed to register route %s %s: %w", route.Method, route.Path, err)
 		}
 
 		// Register access control
