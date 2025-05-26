@@ -256,6 +256,48 @@ func TestWithSortParams(t *testing.T) {
 	assert.Contains(t, def.Querystring["_sort"].Description, "name, date")
 }
 
+func TestGetGroupRouter(t *testing.T) {
+	t.Run("returns group when router is echo.Group", func(t *testing.T) {
+		echoRouter := echo.New()
+
+		// Create a swagger router with the echo router
+		gRouter, err := NewSwaggerRouter(echoRouter, APIInfo().
+			Title("Test API").
+			Version("1.0.0"))
+		require.NoError(t, err)
+
+		// Create a subrouter from the group
+		subRouter, err := gRouter.Group("/test")
+		require.NoError(t, err)
+
+		result := GetGroupRouter(subRouter)
+		assert.NotNil(t, result)
+
+		// Verify group functionality by registering a route
+		result.GET("/route", func(c echo.Context) error {
+			return nil
+		})
+
+		req := httptest.NewRequest("GET", "/test/route", nil)
+		rr := httptest.NewRecorder()
+		echoRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+	})
+
+	t.Run("returns nil when router is not echo.Group", func(t *testing.T) {
+		echoRouter := echo.New()
+
+		// Create a swagger router with the echo router (not a group)
+		gRouter, err := NewSwaggerRouter(echoRouter, APIInfo().
+			Title("Test API").
+			Version("1.0.0"))
+		require.NoError(t, err)
+
+		result := GetGroupRouter(gRouter)
+		assert.Nil(t, result)
+	})
+}
+
 func TestWithFilterParam(t *testing.T) {
 	def := swagger.Definitions{}
 	def = WithFilterParam(def, "age_gt", "Filter ages greater than value", 18)
