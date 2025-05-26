@@ -21,9 +21,18 @@ const (
 
 type Router = *swagger.Router[echo.HandlerFunc, es.Route]
 
-// GetRouter returns the underlying echo.Echo from a httputil.Router
+// GetRouter returns the underlying echo.Echo from a router.Router
 func GetRouter(r Router) *echo.Echo {
 	return swagger.GetRouter[*echo.Echo, echo.HandlerFunc, es.Route](r.Router())
+}
+
+// GetGroupRouter returns the underlying echo.Group from a router.Router if it is a group
+func GetGroupRouter(r Router) *echo.Group {
+	router := r.Router().Router()
+	if group, ok := router.(*echo.Group); ok {
+		return group
+	}
+	return nil
 }
 
 // NewSwaggerRouter creates a new gswagger Router instance from an echo.Echo with default OpenAPI options.
