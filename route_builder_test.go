@@ -31,6 +31,24 @@ func TestWithAccess(t *testing.T) {
 	assert.Equal(t, ACCESS_ADMIN_ROLE, route.Access)
 }
 
+func TestWithMiddlewares(t *testing.T) {
+	handler := func(c echo.Context) error { return nil }
+	mw1 := func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return next(c)
+		}
+	}
+	mw2 := func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return next(c)
+		}
+	}
+
+	route := NewRoute("GET", "/test", handler, WithMiddlewares(mw1, mw2))
+
+	assert.Len(t, route.Middlewares, 2)
+}
+
 func TestWithSwagger(t *testing.T) {
 	handler := func(c echo.Context) error { return nil }
 	swaggerDef := swagger.Definitions{
