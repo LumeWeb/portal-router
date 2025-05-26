@@ -14,6 +14,21 @@ const (
 // RouteOption defines a function type for modifying RouteDefinition properties.
 type RouteOption func(*RouteDefinition)
 
+// DefineOptions converts variadic RouteOption arguments into a slice of RouteOptions.
+// This helper function allows cleaner syntax when defining routes with multiple options.
+//
+// Example:
+//
+//	router.NewRoute("GET", "/path", handler,
+//	    DefineOptions(
+//	        WithAccess(ACCESS_ADMIN_ROLE),
+//	        WithMiddlewares(mw1, mw2),
+//	    )...,
+//	)
+func DefineOptions(opts ...RouteOption) []RouteOption {
+	return opts
+}
+
 // Core route builder
 // NewRoute creates a new RouteDefinition with the given method, path and handler,
 // applying any provided RouteOptions.
@@ -62,8 +77,9 @@ func WithMiddlewares(middleware ...echo.MiddlewareFunc) RouteOption {
 // This can be used to make middleware declarations more readable when passing multiple middlewares.
 //
 // Example:
-//  router.NewRoute("GET", "/path", handler,
-//      WithMiddlewares(Middlewares(mw1, mw2, mw3)))
+//
+//	router.NewRoute("GET", "/path", handler,
+//	    WithMiddlewares(Middlewares(mw1, mw2, mw3)))
 func Middlewares(mw ...echo.MiddlewareFunc) []echo.MiddlewareFunc {
 	return mw
 }
