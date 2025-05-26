@@ -84,7 +84,7 @@ type RouteDefinition struct {
 // It applies common middleware and specific middleware based on the RouteDefinition flags.
 // It also registers access control for the route.
 func RegisterRoutes(
-	gRouter Router, // gswagger router with gorilla types
+	gRouter Router,
 	accessSvc core.AccessService,
 	subdomain string,
 	routes []RouteDefinition,
