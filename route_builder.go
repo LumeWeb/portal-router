@@ -49,3 +49,11 @@ func WithSwagger(def swagger.Definitions) RouteOption {
 		d.Swagger = def
 	}
 }
+
+// WithMiddlewares creates a RouteOption that adds middleware functions to a route.
+// Middlewares will be executed in the order they are provided.
+func WithMiddlewares(middleware ...echo.MiddlewareFunc) RouteOption {
+	return func(d *RouteDefinition) {
+		d.Middlewares = append(d.Middlewares, middleware...)
+	}
+}

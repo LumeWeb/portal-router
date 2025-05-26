@@ -61,6 +61,9 @@ func NewSwaggerRouter(echoRouter *echo.Echo, info APIInfoDefinition) (Router, er
 	return router, nil
 }
 
+// Route is an alias for RouteDefinition for backwards compatibility.
+type Route = RouteDefinition
+
 // RouteDefinition defines a single HTTP route and its associated documentation and middleware.
 type RouteDefinition struct {
 	// Path is the URL path for the route (e.g., "/users/{id}").
