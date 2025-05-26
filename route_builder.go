@@ -57,3 +57,13 @@ func WithMiddlewares(middleware ...echo.MiddlewareFunc) RouteOption {
 		d.Middlewares = append(d.Middlewares, middleware...)
 	}
 }
+
+// Middlewares is a convenience function that returns the provided middleware functions as a slice.
+// This can be used to make middleware declarations more readable when passing multiple middlewares.
+//
+// Example:
+//  router.NewRoute("GET", "/path", handler,
+//      WithMiddlewares(Middlewares(mw1, mw2, mw3)))
+func Middlewares(mw ...echo.MiddlewareFunc) []echo.MiddlewareFunc {
+	return mw
+}
