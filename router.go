@@ -557,24 +557,10 @@ func ListEndpointSwagger(
 		def = SwaggerFilterParam(def, fp.Name, fp.Description, fp.SchemaValue)
 	}
 
-	// Define the paginated response schema
-	paginatedResponse := map[string]any{
-		"items": map[string]any{
-			"type":  "array",
-			"items": itemSchema,
-		},
-	}
-	if paginationSchema != nil {
-		paginatedResponse["pagination"] = paginationSchema
-	}
-
-	// Update the success response
-	def.Responses[http.StatusOK] = swagger.ContentValue{
-		Description: "Success",
-		Content:     swagger.Content{"application/json": {Value: paginatedResponse}},
-	}
-
-	return def
+	// Use WithPaginatedResponse helper for the success response
+	return applyOpts(def, []SwaggerOption{
+		WithPaginatedResponse(itemSchema, paginationSchema),
+	})
 }
 
 // Schema helpers provide safe access to schema fields
