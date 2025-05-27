@@ -352,9 +352,9 @@ func FileUploadSwaggerBody(
 	}
 }
 
-// WithPathParam adds a path parameter definition to existing Swagger definitions.
+// SwaggerPathParam adds a path parameter definition to existing Swagger definitions.
 // This is intended to be chained.
-func WithPathParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
+func SwaggerPathParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
 	if d.PathParams == nil {
 		d.PathParams = make(swagger.ParameterValue)
 	}
@@ -365,9 +365,9 @@ func WithPathParam(d swagger.Definitions, name, description string, schemaValue 
 	return d
 }
 
-// WithQueryParam adds a query parameter definition to existing Swagger definitions.
+// SwaggerQueryParam adds a query parameter definition to existing Swagger definitions.
 // This is intended to be chained.
-func WithQueryParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
+func SwaggerQueryParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
 	if d.Querystring == nil {
 		d.Querystring = make(swagger.ParameterValue)
 	}
@@ -378,9 +378,9 @@ func WithQueryParam(d swagger.Definitions, name, description string, schemaValue
 	return d
 }
 
-// WithHeaderParam adds a header parameter definition to existing Swagger definitions.
+// SwaggerHeaderParam adds a header parameter definition to existing Swagger definitions.
 // This is intended to be chained.
-func WithHeaderParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
+func SwaggerHeaderParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
 	if d.Headers == nil {
 		d.Headers = make(swagger.ParameterValue)
 	}
@@ -391,9 +391,9 @@ func WithHeaderParam(d swagger.Definitions, name, description string, schemaValu
 	return d
 }
 
-// WithCookieParam adds a cookie parameter definition to existing Swagger definitions.
+// SwaggerCookieParam adds a cookie parameter definition to existing Swagger definitions.
 // This is intended to be chained.
-func WithCookieParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
+func SwaggerCookieParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
 	if d.Cookies == nil {
 		d.Cookies = make(swagger.ParameterValue)
 	}
@@ -420,45 +420,59 @@ func ErrorResponseSwagger(status int, body any) map[int]any {
 	}
 }
 
-// WithPaginationParams adds standard pagination query parameters (_start, _end) to Swagger definitions.
+// SwaggerPaginationParams adds standard pagination query parameters (_start, _end) to Swagger definitions.
 // It takes the base Swagger definitions and returns the modified definitions for chaining.
-func WithPaginationParams(d swagger.Definitions) swagger.Definitions {
+func SwaggerPaginationParams(d swagger.Definitions) swagger.Definitions {
 	if d.Querystring == nil {
 		d.Querystring = make(swagger.ParameterValue)
 	}
 	d.Querystring["_start"] = swagger.Parameter{
 		Description: "Starting index of the items to return (0-based). Defaults to 0.",
-		Schema:      &swagger.Schema{Value: 0}, // Example value for schema generation
+		Schema:      &swagger.Schema{Value: 0},
 	}
 	d.Querystring["_end"] = swagger.Parameter{
 		Description: "Ending index of the items to return (exclusive). Defaults to 10.",
-		Schema:      &swagger.Schema{Value: 10}, // Example value for schema generation
+		Schema:      &swagger.Schema{Value: 10},
 	}
 	return d
 }
 
-// WithSortParams adds standard sorting query parameters (_sort, _order) to Swagger definitions.
-// It takes the base Swagger definitions and returns the modified definitions for chaining.
-//
+// SwaggerSortParams adds standard sorting query parameters (_sort, _order) to Swagger definitions.
 // Parameters:
-// - d: The base Swagger definitions.
+// - d: The base Swagger definitions
 // - sortableFields: A list of fields that can be sorted. Used in the description.
-func WithSortParams(d swagger.Definitions, sortableFields []string) swagger.Definitions {
+func SwaggerSortParams(d swagger.Definitions, sortableFields []string) swagger.Definitions {
 	if d.Querystring == nil {
 		d.Querystring = make(swagger.ParameterValue)
 	}
 	d.Querystring["_sort"] = swagger.Parameter{
 		Description: fmt.Sprintf("Comma-separated list of fields to sort by. Available fields: %s", strings.Join(sortableFields, ", ")),
-		Schema:      &swagger.Schema{Value: ""}, // Example value (string)
+		Schema:      &swagger.Schema{Value: ""},
 	}
 	d.Querystring["_order"] = swagger.Parameter{
 		Description: "Comma-separated list of sort orders ('asc' or 'desc') corresponding to _sort fields. Defaults to 'asc'.",
-		Schema:      &swagger.Schema{Value: ""}, // Example value (string)
+		Schema:      &swagger.Schema{Value: ""},
 	}
 	return d
 }
 
-// WithFilterParam adds a single filter query parameter to Swagger definitions.
+// SortParams returns the standard sorting query parameters (_sort, _order).
+// Parameters:
+// - sortableFields: A list of fields that can be sorted. Used in the description.
+func SortParams(sortableFields []string) swagger.ParameterValue {
+	return swagger.ParameterValue{
+		"_sort": swagger.Parameter{
+			Description: fmt.Sprintf("Comma-separated list of fields to sort by. Available fields: %s", strings.Join(sortableFields, ", ")),
+			Schema:      &swagger.Schema{Value: ""},
+		},
+		"_order": swagger.Parameter{
+			Description: "Comma-separated list of sort orders ('asc' or 'desc') corresponding to _sort fields. Defaults to 'asc'.",
+			Schema:      &swagger.Schema{Value: ""},
+		},
+	}
+}
+
+// SwaggerFilterParam adds a single filter query parameter to Swagger definitions.
 // This helper is for simple filters like `fieldName_operator=value`.
 //
 // Parameters:
@@ -466,7 +480,7 @@ func WithSortParams(d swagger.Definitions, sortableFields []string) swagger.Defi
 // - name: The full query parameter name (e.g., "age_gte", "status_eq").
 // - description: Description of the filter parameter.
 // - schemaValue: An example value for schema generation (e.g., 30, "active").
-func WithFilterParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
+func SwaggerFilterParam(d swagger.Definitions, name, description string, schemaValue any) swagger.Definitions {
 	if d.Querystring == nil {
 		d.Querystring = make(swagger.ParameterValue)
 	}
@@ -477,17 +491,27 @@ func WithFilterParam(d swagger.Definitions, name, description string, schemaValu
 	return d
 }
 
-// WithGlobalSearchParam adds the standard global search query parameter ('q') to Swagger definitions.
-// It takes the base Swagger definitions and returns the modified definitions for chaining.
-func WithGlobalSearchParam(d swagger.Definitions) swagger.Definitions {
+
+// SwaggerGlobalSearchParam adds the standard global search query parameter ('q') to Swagger definitions.
+func SwaggerGlobalSearchParam(d swagger.Definitions) swagger.Definitions {
 	if d.Querystring == nil {
 		d.Querystring = make(swagger.ParameterValue)
 	}
 	d.Querystring["q"] = swagger.Parameter{
 		Description: "Global search query string.",
-		Schema:      &swagger.Schema{Value: ""}, // Example value (string)
+		Schema:      &swagger.Schema{Value: ""},
 	}
 	return d
+}
+
+// GlobalSearchParam returns the standard global search query parameter ('q').
+func GlobalSearchParam() swagger.ParameterValue {
+	return swagger.ParameterValue{
+		"q": swagger.Parameter{
+			Description: "Global search query string.",
+			Schema:      &swagger.Schema{Value: ""},
+		},
+	}
 }
 
 // FilterParam defines the details for a single filter query parameter.
@@ -517,42 +541,42 @@ func ListEndpointSwagger(
 	filterParams []FilterParam,
 	errResp map[int]any,
 ) swagger.Definitions {
-	// Start with the base Swagger definitions (authenticated or public)
-	var definitions swagger.Definitions
+	// Start with either AuthSwagger or BasicSwagger based on purpose
+	var def swagger.Definitions
 	if purpose != jwt.PurposeNone {
-		definitions = AuthSwagger(summary, description, purpose, errResp)
+		def = AuthSwagger(summary, description, purpose, errResp)
 	} else {
-		definitions = BasicSwagger(summary, description, errResp)
+		def = BasicSwagger(summary, description, errResp)
 	}
 
-	// Add standard query parameters using the chaining helpers
-	definitions = WithPaginationParams(definitions)
-	definitions = WithSortParams(definitions, sortableFields)
-	definitions = WithGlobalSearchParam(definitions)
+	// Apply standard list endpoint options
+	def = SwaggerPaginationParams(def)
+	def = SwaggerSortParams(def, sortableFields)
+	def = SwaggerGlobalSearchParam(def)
 
-	// Add specific filter parameters
+	// Add filter parameters
 	for _, fp := range filterParams {
-		definitions = WithQueryParam(definitions, fp.Name, fp.Description, fp.SchemaValue)
+		def = SwaggerFilterParam(def, fp.Name, fp.Description, fp.SchemaValue)
 	}
 
-	// Update the 200 OK response content with the paginated schema
-	// Use PaginatedResponseSwagger logic directly
-	paginatedResponseSchema := map[string]any{
+	// Define the paginated response schema
+	paginatedResponse := map[string]any{
 		"items": map[string]any{
 			"type":  "array",
-			"items": itemSchema, // Schema for a single item
+			"items": itemSchema,
 		},
 	}
 	if paginationSchema != nil {
-		paginatedResponseSchema["pagination"] = paginationSchema
+		paginatedResponse["pagination"] = paginationSchema
 	}
 
-	definitions.Responses[http.StatusOK] = swagger.ContentValue{
+	// Update the success response
+	def.Responses[http.StatusOK] = swagger.ContentValue{
 		Description: "Success",
-		Content:     swagger.Content{"application/json": {Value: paginatedResponseSchema}},
+		Content:     swagger.Content{"application/json": {Value: paginatedResponse}},
 	}
 
-	return definitions
+	return def
 }
 
 // Schema helpers provide safe access to schema fields

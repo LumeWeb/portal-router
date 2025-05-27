@@ -158,29 +158,33 @@ func TestBasicSwagger(t *testing.T) {
 	assert.NotContains(t, def.Security, "bearerAuth")
 }
 
-func TestWithPathParam(t *testing.T) {
+func TestSwaggerPathParam(t *testing.T) {
 	def := swagger.Definitions{}
-	def = WithPathParam(def, "id", "Test ID", "string")
+	def = SwaggerPathParam(def, "id", "Test ID", "string")
 
 	assert.NotNil(t, def.PathParams)
 	assert.Equal(t, "Test ID", def.PathParams["id"].Description)
+	assert.Equal(t, "string", def.PathParams["id"].Schema.Value)
 }
 
-func TestWithQueryParam(t *testing.T) {
+func TestSwaggerQueryParam(t *testing.T) {
 	def := swagger.Definitions{}
-	def = WithQueryParam(def, "filter", "Test filter", "string")
+	def = SwaggerQueryParam(def, "filter", "Test filter", "string")
 
 	assert.NotNil(t, def.Querystring)
 	assert.Equal(t, "Test filter", def.Querystring["filter"].Description)
+	assert.Equal(t, "string", def.Querystring["filter"].Schema.Value)
 }
 
-func TestWithPaginationParams(t *testing.T) {
+func TestSwaggerPaginationParams(t *testing.T) {
 	def := swagger.Definitions{}
-	def = WithPaginationParams(def)
+	def = SwaggerPaginationParams(def)
 
 	assert.NotNil(t, def.Querystring)
 	assert.Contains(t, def.Querystring, "_start")
 	assert.Contains(t, def.Querystring, "_end")
+	assert.Equal(t, 0, def.Querystring["_start"].Schema.Value)
+	assert.Equal(t, 10, def.Querystring["_end"].Schema.Value)
 }
 
 func TestNewSwaggerRouter(t *testing.T) {
@@ -246,12 +250,14 @@ func TestSwaggerDocsServed(t *testing.T) {
 
 func TestWithSortParams(t *testing.T) {
 	def := swagger.Definitions{}
-	def = WithSortParams(def, []string{"name", "date"})
+	def = SwaggerSortParams(def, []string{"name", "date"})
 
 	assert.NotNil(t, def.Querystring)
 	assert.Contains(t, def.Querystring, "_sort")
 	assert.Contains(t, def.Querystring, "_order")
 	assert.Contains(t, def.Querystring["_sort"].Description, "name, date")
+	assert.Equal(t, "", def.Querystring["_sort"].Schema.Value)
+	assert.Equal(t, "", def.Querystring["_order"].Schema.Value)
 }
 
 func TestGetGroupRouter(t *testing.T) {
@@ -296,14 +302,34 @@ func TestGetGroupRouter(t *testing.T) {
 	})
 }
 
-func TestWithFilterParam(t *testing.T) {
+func TestSwaggerFilterParam(t *testing.T) {
 	def := swagger.Definitions{}
-	def = WithFilterParam(def, "age_gt", "Filter ages greater than value", 18)
+	def = SwaggerFilterParam(def, "age_gt", "Filter ages greater than value", 18)
 
 	assert.NotNil(t, def.Querystring)
 	assert.Contains(t, def.Querystring, "age_gt")
 	assert.Equal(t, "Filter ages greater than value", def.Querystring["age_gt"].Description)
 	assert.Equal(t, 18, def.Querystring["age_gt"].Schema.Value)
+}
+
+func TestSwaggerHeaderParam(t *testing.T) {
+	def := swagger.Definitions{}
+	def = SwaggerHeaderParam(def, "X-Custom-Header", "Custom header value", "string")
+
+	assert.NotNil(t, def.Headers)
+	assert.Contains(t, def.Headers, "X-Custom-Header")
+	assert.Equal(t, "Custom header value", def.Headers["X-Custom-Header"].Description)
+	assert.Equal(t, "string", def.Headers["X-Custom-Header"].Schema.Value)
+}
+
+func TestSwaggerCookieParam(t *testing.T) {
+	def := swagger.Definitions{}
+	def = SwaggerCookieParam(def, "session", "Session token", "string")
+
+	assert.NotNil(t, def.Cookies)
+	assert.Contains(t, def.Cookies, "session")
+	assert.Equal(t, "Session token", def.Cookies["session"].Description)
+	assert.Equal(t, "string", def.Cookies["session"].Schema.Value)
 }
 
 func TestListEndpointSwagger(t *testing.T) {
