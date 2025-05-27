@@ -2,14 +2,13 @@ package router
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	swagger "go.lumeweb.com/gswagger"
+	"go.lumeweb.com/queryutil/filter"
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	swagger "go.lumeweb.com/gswagger"
-	"go.lumeweb.com/queryutil/filter"
 )
 
 // Define a test schema that implements FieldSchema

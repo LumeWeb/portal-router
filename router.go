@@ -108,6 +108,52 @@ func NewRouter(info APIInfoDefinition, opts ...RouterOption) (Router, error) {
 	return NewSwaggerRouter(e, info)
 }
 
+// ListEndpointSwagger generates Swagger definitions for a list endpoint.
+func ListEndpointSwagger(
+	summary, description string,
+	purpose jwt.Purpose,
+	itemSchema any,
+	paginationSchema any,
+	sortableFields []string,
+	filterParams []FilterParam,
+	errResp map[int]any,
+	opts ...SwaggerOption,
+) swagger.Definitions {
+	// Start with either AuthSwagger or BasicSwagger based on purpose
+	var def swagger.Definitions
+	if purpose != jwt.PurposeNone {
+		def = AuthSwagger(summary, description, purpose, errResp)
+	} else {
+		def = BasicSwagger(summary, description, errResp)
+	}
+
+	// Apply standard list endpoint options
+	def = SwaggerPaginationParams(def)
+	if len(sortableFields) > 0 {
+		def = SwaggerSortParams(def, sortableFields)
+	}
+	def = SwaggerGlobalSearchParam(def)
+
+	// Add filter parameters
+	for _, fp := range filterParams {
+		def = SwaggerFilterParam(def, fp.Name, fp.Description, fp.SchemaValue)
+	}
+
+	// Create response options based on pagination
+	var responseOpt SwaggerOption
+	if paginationSchema != nil {
+		responseOpt = WithPaginatedResponse(itemSchema, paginationSchema)
+	} else {
+		responseOpt = WithArrayResponse(http.StatusOK, "Success", itemSchema)
+	}
+
+	// Apply all options including the response option
+	allOpts := append([]SwaggerOption{responseOpt}, opts...)
+	def = applyOpts(def, "", allOpts)
+
+	return def
+}
+
 // Route is an alias for RouteDefinition for backwards compatibility.
 type Route = RouteDefinition
 
@@ -519,50 +565,6 @@ type FilterParam struct {
 	SchemaValue any // An example value for schema generation
 }
 
-// ListEndpointSwagger generates comprehensive Swagger definitions for a typical list endpoint.
-// It includes authentication, pagination, sorting, global search, and specific filter parameters.
-//
-// Parameters:
-// - summary, description: Standard operation details.
-// - purpose: JWT purpose (for authenticated endpoints). Use jwt.PurposeNone for public.
-// - itemSchema: An instance of the schema for a single item in the list response.
-// - paginationSchema: An instance of the schema for pagination metadata in the response (can be nil).
-// - sortableFields: A list of fields that can be sorted.
-// - filterParams: A slice of FilterParam structs defining additional filter query parameters.
-// - errResp: Additional error responses.
-func ListEndpointSwagger(
-	summary, description string,
-	purpose jwt.Purpose,
-	itemSchema any,
-	paginationSchema any,
-	sortableFields []string,
-	filterParams []FilterParam,
-	errResp map[int]any,
-) swagger.Definitions {
-	// Start with either AuthSwagger or BasicSwagger based on purpose
-	var def swagger.Definitions
-	if purpose != jwt.PurposeNone {
-		def = AuthSwagger(summary, description, purpose, errResp)
-	} else {
-		def = BasicSwagger(summary, description, errResp)
-	}
-
-	// Apply standard list endpoint options
-	def = SwaggerPaginationParams(def)
-	def = SwaggerSortParams(def, sortableFields)
-	def = SwaggerGlobalSearchParam(def)
-
-	// Add filter parameters
-	for _, fp := range filterParams {
-		def = SwaggerFilterParam(def, fp.Name, fp.Description, fp.SchemaValue)
-	}
-
-	// Use WithPaginatedResponse helper for the success response
-	return applyOpts(def, "", []SwaggerOption{
-		WithPaginatedResponse(itemSchema, paginationSchema),
-	})
-}
-
 // Schema helpers provide safe access to schema fields
 func getSchemaDescription(schema *swagger.Schema) string {
 	if schema == nil || schema.Value == nil {
@@ -574,27 +576,6 @@ func getSchemaDescription(schema *swagger.Schema) string {
 		}
 	}
 	return ""
-}
-
-func getSchemaEnum(schema *swagger.Schema) []string {
-	if schema == nil || schema.Value == nil {
-		return nil
-	}
-	if valMap, ok := schema.Value.(map[string]any); ok {
-		if enum, ok := valMap["enum"].([]string); ok {
-			return enum
-		}
-		if enumAny, ok := valMap["enum"].([]any); ok {
-			enum := make([]string, len(enumAny))
-			for i, v := range enumAny {
-				if s, ok := v.(string); ok {
-					enum[i] = s
-				}
-			}
-			return enum
-		}
-	}
-	return nil
 }
 
 // Define reusable schemas for common TUS headers

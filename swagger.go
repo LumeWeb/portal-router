@@ -521,7 +521,17 @@ func WithGlobalSearchParam() SwaggerOption {
 	}
 }
 
-// WithListEndpoint creates a SwaggerOption for a typical list endpoint with pagination, sorting and filtering.
+// WithListEndpoint creates a SwaggerOption for configuring a list endpoint with pagination, sorting and filtering.
+// It includes authentication, pagination, sorting, global search, and specific filter parameters.
+//
+// Parameters:
+// - summary, description: Standard operation details.
+// - purpose: JWT purpose (for authenticated endpoints). Use jwt.PurposeNone for public.
+// - itemSchema: An instance of the schema for a single item in the list response.
+// - paginationSchema: An instance of the schema for pagination metadata in the response (can be nil).
+// - sortableFields: A list of fields that can be sorted.
+// - filterParams: A slice of FilterParam structs defining additional filter query parameters.
+// - opt: Additional SwaggerOption to apply to the definitions.
 func WithListEndpoint(
 	summary, description string,
 	purpose jwt.Purpose,
@@ -529,7 +539,7 @@ func WithListEndpoint(
 	paginationSchema any,
 	sortableFields []string,
 	filterParams []FilterParam,
-	errResp map[int]any,
+	opts ...SwaggerOption,
 ) SwaggerOption {
 	return func(d *swagger.Definitions, accessRole string) {
 		*d = ListEndpointSwagger(
@@ -540,7 +550,8 @@ func WithListEndpoint(
 			paginationSchema,
 			sortableFields,
 			filterParams,
-			errResp,
+			nil,
+			opts...,
 		)
 	}
 }
