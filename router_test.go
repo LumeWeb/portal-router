@@ -400,3 +400,87 @@ func TestTusOptionsSwagger(t *testing.T) {
 	assert.Contains(t, def.Tags, "TUS")
 	assert.Contains(t, def.Responses, http.StatusOK)
 }
+
+func TestWithSwagger(t *testing.T) {
+	handler := func(c echo.Context) error { return nil }
+	route := NewRoute("GET", "/test", handler, WithSwagger(WithSummary("Test Summary")))
+
+	assert.Equal(t, "Test Summary", route.Swagger.Summary)
+
+	// Test route can be registered with NewRouter
+	router, err := NewRouter(APIInfo().
+		Title("Test API").
+		Version("1.0.0"))
+	require.NoError(t, err)
+
+	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
+	assert.NoError(t, err)
+}
+
+func TestWithCustomErrorResponses(t *testing.T) {
+	tests := []struct {
+		name          string
+		accessRole    string
+		customErrors  map[int]swagger.ContentValue
+		expectedCodes []int
+	}{
+		{
+			name:       "public route with string errors",
+			accessRole: "",
+			customErrors: map[int]swagger.ContentValue{
+				422: {
+					Description: "Validation failed",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Validation failed"},
+						},
+					},
+				},
+				429: {
+					Description: "Too many requests",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Too many requests"},
+						},
+					},
+				},
+			},
+			expectedCodes: []int{400, 404, 500, 422, 429},
+		},
+		{
+			name:       "auth route with string errors",
+			accessRole: ACCESS_USER_ROLE,
+			customErrors: map[int]swagger.ContentValue{
+				409: {
+					Description: "Conflict",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Conflict"},
+						},
+					},
+				},
+				503: {
+					Description: "Service unavailable",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Service unavailable"},
+						},
+					},
+				},
+			},
+			expectedCodes: []int{400, 401, 403, 404, 500, 409, 503},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			route := NewRoute("GET", "/test", nil, WithAccess(tt.accessRole))
+			WithCustomErrorResponses(tt.customErrors)(&route)
+
+			assert.Len(t, route.Swagger.Responses, len(tt.expectedCodes))
+			for _, code := range tt.expectedCodes {
+				assert.Contains(t, route.Swagger.Responses, code)
+			}
+		})
+	}
+}
