@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/stretchr/testify/require"
+	swagger "go.lumeweb.com/gswagger"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,6 +75,110 @@ func TestWithMiddlewares(t *testing.T) {
 
 	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger, route.Middlewares...)
 	assert.NoError(t, err)
+}
+
+func TestParameterOptions(t *testing.T) {
+	tests := []struct {
+		name     string
+		option   SwaggerOption
+		paramKey string
+	}{
+		{
+			name:     "WithPathParam",
+			option:   WithPathParam("id", "Resource ID", "string"),
+			paramKey: "id",
+		},
+		{
+			name:     "WithQueryParam",
+			option:   WithQueryParam("filter", "Filter criteria", "string"),
+			paramKey: "filter",
+		},
+		{
+			name:     "WithHeaderParam",
+			option:   WithHeaderParam("X-Custom-Header", "Custom header", "string"),
+			paramKey: "X-Custom-Header",
+		},
+		{
+			name:     "WithCookieParam",
+			option:   WithCookieParam("session", "Session token", "string"),
+			paramKey: "session",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			def := swagger.Definitions{}
+			tt.option(&def)
+
+			var params swagger.ParameterValue
+			switch tt.name {
+			case "WithPathParam":
+				params = def.PathParams
+			case "WithQueryParam":
+				params = def.Querystring
+			case "WithHeaderParam":
+				params = def.Headers
+			case "WithCookieParam":
+				params = def.Cookies
+			}
+
+			assert.NotNil(t, params)
+			assert.Contains(t, params, tt.paramKey)
+			assert.Equal(t, "string", params[tt.paramKey].Schema.Value)
+		})
+	}
+}
+
+func TestSwaggerParameterFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		fn       func(swagger.Definitions, string, string, any) swagger.Definitions
+		paramKey string
+	}{
+		{
+			name:     "SwaggerPathParam",
+			fn:       SwaggerPathParam,
+			paramKey: "id",
+		},
+		{
+			name:     "SwaggerQueryParam",
+			fn:       SwaggerQueryParam,
+			paramKey: "filter",
+		},
+		{
+			name:     "SwaggerHeaderParam",
+			fn:       SwaggerHeaderParam,
+			paramKey: "X-Custom-Header",
+		},
+		{
+			name:     "SwaggerCookieParam",
+			fn:       SwaggerCookieParam,
+			paramKey: "session",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			def := swagger.Definitions{}
+			def = tt.fn(def, tt.paramKey, "test description", "string")
+
+			var params swagger.ParameterValue
+			switch tt.name {
+			case "SwaggerPathParam":
+				params = def.PathParams
+			case "SwaggerQueryParam":
+				params = def.Querystring
+			case "SwaggerHeaderParam":
+				params = def.Headers
+			case "SwaggerCookieParam":
+				params = def.Cookies
+			}
+
+			assert.NotNil(t, params)
+			assert.Contains(t, params, tt.paramKey)
+			assert.Equal(t, "string", params[tt.paramKey].Schema.Value)
+		})
+	}
 }
 
 func TestRouteExecution(t *testing.T) {

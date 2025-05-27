@@ -291,3 +291,59 @@ var operatorDocs = map[string]string{
 	"nina":         "Array does not contain any of the specified values",
 	"like":         "Case-insensitive contains (alias for contains)",
 }
+
+// WithPathParam creates a SwaggerOption that adds a path parameter definition.
+func WithPathParam(name, description string, schemaValue any) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerPathParam(*d, name, description, schemaValue)
+	}
+}
+
+// WithQueryParam creates a SwaggerOption that adds a query parameter definition.
+func WithQueryParam(name, description string, schemaValue any) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerQueryParam(*d, name, description, schemaValue)
+	}
+}
+
+// WithHeaderParam creates a SwaggerOption that adds a header parameter definition.
+func WithHeaderParam(name, description string, schemaValue any) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerHeaderParam(*d, name, description, schemaValue)
+	}
+}
+
+// WithCookieParam creates a SwaggerOption that adds a cookie parameter definition.
+func WithCookieParam(name, description string, schemaValue any) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerCookieParam(*d, name, description, schemaValue)
+	}
+}
+
+// WithFilterParam creates a SwaggerOption that adds a filter parameter.
+func WithFilterParam(name, description string, schemaValue any) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerFilterParam(*d, name, description, schemaValue)
+	}
+}
+
+// WithPaginationParams creates a SwaggerOption that adds standard pagination parameters.
+func WithPaginationParams() SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerPaginationParams(*d)
+	}
+}
+
+// WithSortParams creates a SwaggerOption that adds standard sorting parameters.
+func WithSortParams(sortableFields []string) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerSortParams(*d, sortableFields)
+	}
+}
+
+// WithGlobalSearchParam creates a SwaggerOption that adds the global search parameter.
+func WithGlobalSearchParam() SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = SwaggerGlobalSearchParam(*d)
+	}
+}
