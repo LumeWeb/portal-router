@@ -243,7 +243,7 @@ func AuthSwagger(
 // - description: A detailed description of the operation.
 // - reqBody: An instance of the request body DTO for schema generation. Can be nil.
 // - respBody: An instance of the success response body DTO for schema generation. Can be nil.
-// - errResp: A map of additional error status codes and example response bodies.
+// - errResp: A map of additional error status codes and response bodies (use DefineSwaggerErrorResponse(s) helpers).
 func BasicSwagger(
 	summary, description string,
 	errResp map[int]any,
