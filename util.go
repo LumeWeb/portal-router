@@ -49,7 +49,7 @@ func baseDefinition() swagger.Definitions {
 // Helper to apply options to any definition
 // applyOpts applies a set of SwaggerOptions to a swagger.Definitions,
 // returning the modified definitions.
-func applyOpts(d swagger.Definitions, opts []SwaggerOption) swagger.Definitions {
+func applyOpts(d swagger.Definitions, access string, opts []SwaggerOption) swagger.Definitions {
 	// Make shallow copy of the definition
 	result := d
 
@@ -77,7 +77,7 @@ func applyOpts(d swagger.Definitions, opts []SwaggerOption) swagger.Definitions 
 	if opts != nil {
 		for _, opt := range opts {
 			if opt != nil {
-				opt(&result)
+				opt(&result, access)
 			}
 		}
 	}

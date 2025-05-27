@@ -11,7 +11,7 @@ import (
 
 // SwaggerOption defines a function type for modifying swagger.Definitions.
 // Used to apply customizations to OpenAPI/Swagger documentation.
-type SwaggerOption func(*swagger.Definitions)
+type SwaggerOption func(*swagger.Definitions, string)
 
 // FieldSchema defines the interface for providing field-level schema information
 // used to generate sorting and filtering documentation.
@@ -30,14 +30,14 @@ type SchemaProvider interface {
 func WithSwaggerOptions(opts ...SwaggerOption) RouteOption {
 	return func(d *RouteDefinition) {
 		for _, opt := range opts {
-			opt(&d.Swagger)
+			opt(&d.Swagger, d.Access)
 		}
 	}
 }
 
 // WithRequestBody creates a Swagger option for request body definition.
 func WithRequestBody(value interface{}, description string, required bool) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		d.RequestBody = &swagger.ContentValue{
 			Description: description,
 			Required:    required,
@@ -52,7 +52,7 @@ func WithRequestBody(value interface{}, description string, required bool) Swagg
 
 // WithFileUpload creates a Swagger option for file upload definition.
 func WithFileUpload(description string, required bool) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		d.RequestBody = &swagger.ContentValue{
 			Description: description,
 			Required:    required,
@@ -69,7 +69,7 @@ func WithFileUpload(description string, required bool) SwaggerOption {
 
 // WithArrayResponse creates a Swagger option for array response definition.
 func WithArrayResponse(status int, description string, itemValue interface{}) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		if d.Responses == nil {
 			d.Responses = make(map[int]swagger.ContentValue)
 		}
@@ -90,7 +90,7 @@ func WithArrayResponse(status int, description string, itemValue interface{}) Sw
 
 // WithResponseHeaders creates a Swagger option for response with headers.
 func WithResponseHeaders(status int, description string, content map[string]swagger.Schema, headers map[string]string) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		if d.Responses == nil {
 			d.Responses = make(map[int]swagger.ContentValue)
 		}
@@ -104,21 +104,21 @@ func WithResponseHeaders(status int, description string, content map[string]swag
 
 // WithTags creates a Swagger option for adding tags.
 func WithTags(tags ...string) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		d.Tags = tags
 	}
 }
 
 // WithSummary creates a Swagger option for setting summary.
 func WithSummary(summary string) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		d.Summary = summary
 	}
 }
 
 // WithDescription creates a Swagger option for setting description.
 func WithDescription(description string) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		d.Description = description
 	}
 }
@@ -129,12 +129,12 @@ func WithSwagger(opts ...SwaggerOption) RouteOption {
 	return func(d *RouteDefinition) {
 		def := swagger.Definitions{}
 
-		// Apply all provided options
+		// Apply options with access context
 		for _, opt := range opts {
-			opt(&def)
+			opt(&def, d.Access) // Pass access level
 		}
 
-		// If Responses aren't explicitly set, add default ones based on access
+		// Set defaults if no responses configured
 		if def.Responses == nil {
 			if d.Access == ACCESS_USER_ROLE || d.Access == ACCESS_ADMIN_ROLE {
 				def.Responses = DefaultAuthErrorResponses()
@@ -150,7 +150,7 @@ func WithSwagger(opts ...SwaggerOption) RouteOption {
 // WithSchema creates a SwaggerOption that adds sorting and filtering parameters
 // based on the provided FieldSchema implementation.
 func WithSchema(schema FieldSchema) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		// Add sort parameters
 		sortFields := schema.SortableFields()
 		d.Querystring["_sort"] = swagger.Parameter{
@@ -305,7 +305,7 @@ func DefineResponse(status int, description string, opts ...ResponseOption) map[
 
 // WithSuccessResponse creates a SwaggerOption that adds a success response
 func WithSuccessResponse(status int, description string, opts ...ResponseOption) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		if d.Responses == nil {
 			d.Responses = make(map[int]swagger.ContentValue)
 		}
@@ -408,35 +408,35 @@ var operatorDocs = map[string]string{
 
 // WithPathParam creates a SwaggerOption that adds a path parameter definition.
 func WithPathParam(name, description string, schemaValue any) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerPathParam(*d, name, description, schemaValue)
 	}
 }
 
 // WithQueryParam creates a SwaggerOption that adds a query parameter definition.
 func WithQueryParam(name, description string, schemaValue any) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerQueryParam(*d, name, description, schemaValue)
 	}
 }
 
 // WithHeaderParam creates a SwaggerOption that adds a header parameter definition.
 func WithHeaderParam(name, description string, schemaValue any) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerHeaderParam(*d, name, description, schemaValue)
 	}
 }
 
 // WithCookieParam creates a SwaggerOption that adds a cookie parameter definition.
 func WithCookieParam(name, description string, schemaValue any) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerCookieParam(*d, name, description, schemaValue)
 	}
 }
 
 // WithFilterParam creates a SwaggerOption that adds a filter parameter.
 func WithFilterParam(name, description string, schemaValue any) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerFilterParam(*d, name, description, schemaValue)
 	}
 }
@@ -447,7 +447,7 @@ func WithFilterParam(name, description string, schemaValue any) SwaggerOption {
 // - Array values: field_operator=value1,value2,value3 or field_operator[]=value1&field_operator[]=value2
 // - Complex: filters[field][operator]=value (e.g. filters[age][gt]=30)
 func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		operators := schema.FilterOperators()
 		for fieldName, ops := range operators {
 			for _, op := range ops {
@@ -502,21 +502,21 @@ func opIsMultiValue(op filter.Operator) bool {
 
 // WithPaginationParams creates a SwaggerOption that adds standard pagination parameters.
 func WithPaginationParams() SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerPaginationParams(*d)
 	}
 }
 
 // WithSortParams creates a SwaggerOption that adds standard sorting parameters.
 func WithSortParams(sortableFields []string) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerSortParams(*d, sortableFields)
 	}
 }
 
 // WithGlobalSearchParam creates a SwaggerOption that adds the global search parameter.
 func WithGlobalSearchParam() SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = SwaggerGlobalSearchParam(*d)
 	}
 }
@@ -531,7 +531,7 @@ func WithListEndpoint(
 	filterParams []FilterParam,
 	errResp map[int]any,
 ) SwaggerOption {
-	return func(d *swagger.Definitions) {
+	return func(d *swagger.Definitions, accessRole string) {
 		*d = ListEndpointSwagger(
 			summary,
 			description,
@@ -542,5 +542,20 @@ func WithListEndpoint(
 			filterParams,
 			errResp,
 		)
+	}
+}
+
+// WithErrorResponses creates a SwaggerOption that merges custom error responses with
+// default responses based on access level (same behavior as WithCustomErrorResponses)
+func WithErrorResponses(errors map[int]swagger.ContentValue) SwaggerOption {
+	return func(d *swagger.Definitions, accessRole string) {
+		var defaultResponses map[int]swagger.ContentValue
+		if accessRole == ACCESS_USER_ROLE || accessRole == ACCESS_ADMIN_ROLE {
+			defaultResponses = DefaultAuthErrorResponses()
+		} else {
+			defaultResponses = DefaultPublicErrorResponses()
+		}
+
+		d.Responses = DefineSwaggerErrorResponses(defaultResponses, errors)
 	}
 }

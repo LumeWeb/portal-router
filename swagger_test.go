@@ -67,7 +67,7 @@ func TestWithFilterParamsFromSchema(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create route with filter params
 			def := swagger.Definitions{}
-			WithFilterParamsFromSchema(tt.schema)(&def)
+			WithFilterParamsFromSchema(tt.schema)(&def, "")
 
 			// Verify all expected parameters exist
 			for _, param := range tt.wantParams {
@@ -131,7 +131,7 @@ func TestWithRequestBody(t *testing.T) {
 
 	opt := WithRequestBody(TestBody{}, "Test description", true)
 	def := swagger.Definitions{}
-	opt(&def)
+	opt(&def, "")
 
 	assert.NotNil(t, def.RequestBody)
 	assert.Equal(t, "Test description", def.RequestBody.Description)
@@ -142,7 +142,7 @@ func TestWithRequestBody(t *testing.T) {
 func TestWithFileUpload(t *testing.T) {
 	opt := WithFileUpload("File upload description", true)
 	def := swagger.Definitions{}
-	opt(&def)
+	opt(&def, "")
 
 	assert.NotNil(t, def.RequestBody)
 	assert.Equal(t, "File upload description", def.RequestBody.Description)
@@ -157,7 +157,7 @@ func TestWithArrayResponse(t *testing.T) {
 
 	opt := WithArrayResponse(http.StatusOK, "Test items", Item{})
 	def := swagger.Definitions{}
-	opt(&def)
+	opt(&def, "")
 
 	assert.NotNil(t, def.Responses)
 	assert.Contains(t, def.Responses, http.StatusOK)
@@ -178,7 +178,7 @@ func TestWithResponseHeaders(t *testing.T) {
 
 	opt := WithResponseHeaders(http.StatusOK, "Success", content, headers)
 	def := swagger.Definitions{}
-	opt(&def)
+	opt(&def, "")
 
 	assert.NotNil(t, def.Responses)
 	assert.Contains(t, def.Responses, http.StatusOK)
@@ -243,7 +243,7 @@ func TestResponseHelpers(t *testing.T) {
 		WithSuccessResponse(http.StatusOK, "Success",
 			WithJSONContent("test"),
 			WithTotalCountHeader(),
-		)(&def)
+		)(&def, "")
 
 		assert.Contains(t, def.Responses, http.StatusOK)
 		resp := def.Responses[http.StatusOK]
@@ -257,7 +257,7 @@ func TestResponseHelpers(t *testing.T) {
 		type Meta struct{ Total int }
 
 		def := swagger.Definitions{}
-		WithPaginatedResponse(Item{}, Meta{})(&def)
+		WithPaginatedResponse(Item{}, Meta{})(&def, "")
 
 		assert.Contains(t, def.Responses, http.StatusOK)
 		resp := def.Responses[http.StatusOK]
@@ -313,7 +313,7 @@ func TestResponseHelpers(t *testing.T) {
 func TestWithTags(t *testing.T) {
 	opt := WithTags("users", "admin")
 	def := swagger.Definitions{}
-	opt(&def)
+	opt(&def, "")
 
 	assert.Equal(t, []string{"users", "admin"}, def.Tags)
 }
@@ -321,7 +321,7 @@ func TestWithTags(t *testing.T) {
 func TestWithSummary(t *testing.T) {
 	opt := WithSummary("Test summary")
 	def := swagger.Definitions{}
-	opt(&def)
+	opt(&def, "")
 
 	assert.Equal(t, "Test summary", def.Summary)
 }
@@ -329,7 +329,7 @@ func TestWithSummary(t *testing.T) {
 func TestWithDescription(t *testing.T) {
 	opt := WithDescription("Test description")
 	def := swagger.Definitions{}
-	opt(&def)
+	opt(&def, "")
 
 	assert.Equal(t, "Test description", def.Description)
 }
@@ -423,4 +423,71 @@ func TestDefineSwaggerErrorResponses(t *testing.T) {
 	assert.True(t, ok, "Expected content value to be ResponseError")
 
 	assert.Equal(t, "Not found", responseError.Error)
+}
+func TestWithErrorResponses(t *testing.T) {
+	tests := []struct {
+		name          string
+		accessRole    string
+		customErrors  map[int]swagger.ContentValue
+		expectedCodes []int
+	}{
+		{
+			name:       "public route with string errors",
+			accessRole: "",
+			customErrors: map[int]swagger.ContentValue{
+				422: {
+					Description: "Validation failed",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Validation failed"},
+						},
+					},
+				},
+				429: {
+					Description: "Too many requests",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Too many requests"},
+						},
+					},
+				},
+			},
+			expectedCodes: []int{400, 404, 500, 422, 429},
+		},
+		{
+			name:       "auth route with string errors",
+			accessRole: ACCESS_USER_ROLE,
+			customErrors: map[int]swagger.ContentValue{
+				409: {
+					Description: "Conflict",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Conflict"},
+						},
+					},
+				},
+				503: {
+					Description: "Service unavailable",
+					Content: map[string]swagger.Schema{
+						"application/json": {
+							Value: ResponseError{Error: "Service unavailable"},
+						},
+					},
+				},
+			},
+			expectedCodes: []int{400, 401, 403, 404, 500, 409, 503},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			route := NewRoute("GET", "/test", nil, WithAccess(tt.accessRole))
+			WithErrorResponses(tt.customErrors)(&route.Swagger, route.Access)
+
+			assert.Len(t, route.Swagger.Responses, len(tt.expectedCodes))
+			for _, code := range tt.expectedCodes {
+				assert.Contains(t, route.Swagger.Responses, code)
+			}
+		})
+	}
 }

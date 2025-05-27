@@ -261,7 +261,7 @@ func BasicSwagger(
 		}
 	}
 
-	return applyOpts(def, opts)
+	return applyOpts(def, "", opts)
 }
 
 // PaginatedResponseSwagger generates Swagger definitions for an endpoint
@@ -558,7 +558,7 @@ func ListEndpointSwagger(
 	}
 
 	// Use WithPaginatedResponse helper for the success response
-	return applyOpts(def, []SwaggerOption{
+	return applyOpts(def, "", []SwaggerOption{
 		WithPaginatedResponse(itemSchema, paginationSchema),
 	})
 }

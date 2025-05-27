@@ -9,7 +9,7 @@ import (
 type AccessService interface {
 	// CheckAccess verifies if a user has access to a specific route
 	CheckAccess(userId uint, fqdn, path, method string) (bool, error)
-	
+
 	// RegisterRoute registers a new route with its access requirements
 	RegisterRoute(subdomain, path, method, role string) error
 }
@@ -63,26 +63,6 @@ func NewRoute(method, path string, handler echo.HandlerFunc, opts ...RouteOption
 func WithAccess(accessRole string) RouteOption {
 	return func(d *RouteDefinition) {
 		d.Access = accessRole
-	}
-}
-
-// WithCustomErrorResponses creates a RouteOption that adds custom error responses while preserving core defaults.
-// The errors map should use HTTP status codes as keys and response definitions as values (as returned by DefineSwaggerErrorResponse).
-func WithCustomErrorResponses(errors map[int]swagger.ContentValue) RouteOption {
-	return func(d *RouteDefinition) {
-		// Get appropriate defaults based on access level
-		var defaultResponses map[int]swagger.ContentValue
-		if d.Access == ACCESS_USER_ROLE || d.Access == ACCESS_ADMIN_ROLE {
-			defaultResponses = DefaultAuthErrorResponses()
-		} else {
-			defaultResponses = DefaultPublicErrorResponses()
-		}
-
-		// Merge defaults with custom responses (custom takes precedence)
-		d.Swagger.Responses = DefineSwaggerErrorResponses(
-			defaultResponses,
-			errors,
-		)
 	}
 }
 

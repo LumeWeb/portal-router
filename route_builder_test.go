@@ -108,7 +108,7 @@ func TestParameterOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			def := swagger.Definitions{}
-			tt.option(&def)
+			tt.option(&def, "")
 
 			var params swagger.ParameterValue
 			switch tt.name {
