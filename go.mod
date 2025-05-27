@@ -10,7 +10,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.lumeweb.com/gswagger v0.16.1
 	go.lumeweb.com/portal v0.4.2-0.20250504192002-4547d95e5a02
-	go.lumeweb.com/portal-middleware v0.1.1
+	go.lumeweb.com/portal-middleware v0.2.5
 )
 
 require (
