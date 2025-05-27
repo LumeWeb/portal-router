@@ -5,6 +5,15 @@ import (
 	swagger "go.lumeweb.com/gswagger"
 )
 
+// AccessService defines the interface for route access control
+type AccessService interface {
+	// CheckAccess verifies if a user has access to a specific route
+	CheckAccess(userId uint, fqdn, path, method string) (bool, error)
+	
+	// RegisterRoute registers a new route with its access requirements
+	RegisterRoute(subdomain, path, method, role string) error
+}
+
 // Common access role constants
 const (
 	ACCESS_USER_ROLE  = "user"  // Standard user access role
