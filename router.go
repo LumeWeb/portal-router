@@ -11,7 +11,6 @@ import (
 	swagger "go.lumeweb.com/gswagger"
 	es "go.lumeweb.com/gswagger/support/echo"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
-	"go.lumeweb.com/portal/core"
 )
 
 const (
@@ -133,7 +132,7 @@ type RouteDefinition struct {
 // It also registers access control for protected routes if an access service is provided.
 func RegisterRoutes(
 	gRouter Router,
-	accessSvc core.AccessService,
+	accessSvc AccessService,
 	subdomain string,
 	routes []RouteDefinition,
 	commonMiddleware ...echo.MiddlewareFunc,
@@ -490,7 +489,6 @@ func SwaggerFilterParam(d swagger.Definitions, name, description string, schemaV
 	}
 	return d
 }
-
 
 // SwaggerGlobalSearchParam adds the standard global search query parameter ('q') to Swagger definitions.
 func SwaggerGlobalSearchParam(d swagger.Definitions) swagger.Definitions {
