@@ -69,8 +69,7 @@ func TestRegisterRoutes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			echoRouter := echo.New()
-			eRouter, err := NewSwaggerRouter(echoRouter, APIInfo().
+			eRouter, err := NewRouter(APIInfo().
 				Title("Test API").
 				Version("1.0.0"))
 			require.NoError(t, err)
@@ -108,7 +107,7 @@ func TestRegisterRoutes(t *testing.T) {
 			for _, route := range tt.routes {
 				req := httptest.NewRequest(route.Method, route.Path, nil)
 				rr := httptest.NewRecorder()
-				echoRouter.ServeHTTP(rr, req)
+				eRouter.ServeHTTP(rr, req)
 				assert.NotEqual(t, http.StatusNotFound, rr.Code)
 			}
 		})
@@ -185,8 +184,7 @@ func TestWithPaginationParams(t *testing.T) {
 }
 
 func TestNewSwaggerRouter(t *testing.T) {
-	echoRouter := echo.New()
-	eRouter, err := NewSwaggerRouter(echoRouter, APIInfo().
+	eRouter, err := NewRouter(APIInfo().
 		Title("Test API").
 		Version("1.0.0"))
 

@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"go.lumeweb.com/gswagger/apirouter"
 	"net/http"
 	"strings"
 
@@ -55,11 +56,14 @@ func GetGroupRouter(r Router) *echo.Group {
 //	    log.Fatal(err)
 //	}
 func NewSwaggerRouter(echoRouter *echo.Echo, info APIInfoDefinition) (Router, error) {
-	router, err := swagger.NewRouter(es.NewRouter(echoRouter), swagger.Options{
+	router, err := swagger.NewRouter(es.NewRouter(echoRouter), swagger.Options[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]{
 		JSONDocumentationPath: SwaggerJSONPath,
 		YAMLDocumentationPath: SwaggerYAMLPath,
 		Openapi: &openapi3.T{
 			Info: info.toOpenAPI(),
+		},
+		FrameworkRouterFactory: func() apirouter.Router[echo.HandlerFunc, echo.MiddlewareFunc, es.Route] {
+			return es.NewRouter(echo.New())
 		},
 	})
 	if err != nil {
@@ -67,6 +71,42 @@ func NewSwaggerRouter(echoRouter *echo.Echo, info APIInfoDefinition) (Router, er
 	}
 
 	return router, nil
+}
+
+// RouterOption defines a function type for configuring an Echo router.
+type RouterOption func(*echo.Echo)
+
+// applyRouterOptions applies all router configuration options to the given Echo instance.
+func applyRouterOptions(e *echo.Echo, opts ...RouterOption) {
+	for _, opt := range opts {
+		opt(e)
+	}
+}
+
+// NewRouter creates a new Echo router with Swagger integration and sensible defaults.
+// This is a convenience wrapper that handles both Echo and Swagger router initialization.
+//
+// Parameters:
+//   - info: API metadata (use APIInfo() builder)
+//   - opts: Optional router configuration options
+//
+// Returns:
+//   - Router: The Swagger-wrapped router
+//   - error: Any initialization error
+//
+// Example:
+//
+//	router, err := NewRouter(APIInfo().
+//	    Title("My API").
+//	    Version("1.0.0"))
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+func NewRouter(info APIInfoDefinition, opts ...RouterOption) (Router, error) {
+	e := echo.New()
+	applyRouterOptions(e, opts...)
+
+	return NewSwaggerRouter(e, info)
 }
 
 // Route is an alias for RouteDefinition for backwards compatibility.
