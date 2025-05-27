@@ -41,30 +41,16 @@ func TestFSAdapter(t *testing.T) {
 }
 
 func TestConfigHelpers(t *testing.T) {
-	t.Run("WebAppConfig", func(t *testing.T) {
+	t.Run("StaticConfigWithFS", func(t *testing.T) {
 		mockFS := &mockFS{}
-		cfg := WebAppConfig(mockFS)
+		cfg := StaticConfigWithFS(mockFS)
 		assert.Equal(t, mockFS, cfg.FS)
 		assert.Equal(t, "index.html", cfg.IndexFile)
 	})
 
-	t.Run("WebAppEnvConfig", func(t *testing.T) {
-		t.Setenv("TEST_WEBAPP_PATH", "testdata")
-		cfg := WebAppEnvConfig("TEST_WEBAPP_PATH")
-		assert.NotNil(t, cfg.FS)
-		assert.Equal(t, "index.html", cfg.IndexFile)
-	})
-
-	t.Run("StaticSiteConfig", func(t *testing.T) {
-		mockFS := &mockFS{}
-		cfg := StaticSiteConfig(mockFS)
-		assert.Equal(t, mockFS, cfg.FS)
-		assert.Equal(t, "index.html", cfg.IndexFile)
-	})
-
-	t.Run("StaticSiteEnvConfig", func(t *testing.T) {
-		t.Setenv("TEST_SITES_PATH", "testdata")
-		cfg := StaticSiteEnvConfig("TEST_SITES_PATH")
+	t.Run("StaticConfigFromEnv", func(t *testing.T) {
+		t.Setenv("TEST_STATIC_PATH", "testdata")
+		cfg := StaticConfigFromEnv("TEST_STATIC_PATH")
 		assert.NotNil(t, cfg.FS)
 		assert.Equal(t, "index.html", cfg.IndexFile)
 	})
@@ -87,55 +73,29 @@ func TestDefaultSetupHelpers(t *testing.T) {
 	r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
 	require.NoError(t, err)
 
-	t.Run("DefaultWebAppSetup", func(t *testing.T) {
+	t.Run("DefaultStaticSetup", func(t *testing.T) {
 		mockFS := &mockFS{}
-		err := DefaultWebAppSetup(r, mockFS)
+		err := DefaultStaticSetup(r, mockFS)
 		assert.NoError(t, err)
 	})
 
-	t.Run("DefaultWebAppEnvSetup", func(t *testing.T) {
-		t.Setenv("TEST_WEBAPP_PATH", "testdata")
-		err := DefaultWebAppEnvSetup(r, "TEST_WEBAPP_PATH")
+	t.Run("DefaultStaticEnvSetup", func(t *testing.T) {
+		t.Setenv("TEST_STATIC_PATH", "testdata")
+		err := DefaultStaticEnvSetup(r, "TEST_STATIC_PATH")
 		assert.NoError(t, err)
 	})
 
-	t.Run("MustDefaultWebAppSetup", func(t *testing.T) {
+	t.Run("MustDefaultStaticSetup", func(t *testing.T) {
 		mockFS := &mockFS{}
 		assert.NotPanics(t, func() {
-			MustDefaultWebAppSetup(r, mockFS)
+			MustDefaultStaticSetup(r, mockFS)
 		})
 	})
 
-	t.Run("MustDefaultWebAppEnvSetup", func(t *testing.T) {
-		t.Setenv("TEST_WEBAPP_PATH", "testdata")
+	t.Run("MustDefaultStaticEnvSetup", func(t *testing.T) {
+		t.Setenv("TEST_STATIC_PATH", "testdata")
 		assert.NotPanics(t, func() {
-			MustDefaultWebAppEnvSetup(r, "TEST_WEBAPP_PATH")
-		})
-	})
-
-	t.Run("DefaultStaticSiteSetup", func(t *testing.T) {
-		mockFS := &mockFS{}
-		err := DefaultStaticSiteSetup(r, mockFS)
-		assert.NoError(t, err)
-	})
-
-	t.Run("DefaultStaticSiteEnvSetup", func(t *testing.T) {
-		t.Setenv("TEST_SITES_PATH", "testdata")
-		err := DefaultStaticSiteEnvSetup(r, "TEST_SITES_PATH")
-		assert.NoError(t, err)
-	})
-
-	t.Run("MustDefaultStaticSiteSetup", func(t *testing.T) {
-		mockFS := &mockFS{}
-		assert.NotPanics(t, func() {
-			MustDefaultStaticSiteSetup(r, mockFS)
-		})
-	})
-
-	t.Run("MustDefaultStaticSiteEnvSetup", func(t *testing.T) {
-		t.Setenv("TEST_SITES_PATH", "testdata")
-		assert.NotPanics(t, func() {
-			MustDefaultStaticSiteEnvSetup(r, "TEST_SITES_PATH")
+			MustDefaultStaticEnvSetup(r, "TEST_STATIC_PATH")
 		})
 	})
 

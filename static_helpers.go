@@ -35,40 +35,25 @@ func fsAdapter(fsys any) fs.FS {
 
 // Predefined configurations for common static file setups
 
-// WebAppConfig returns a StaticConfig optimized for web applications with:
-// - Embedded filesystem
-// - SPA fallback to index.html
-func WebAppConfig(fsys fs.FS) StaticConfig {
-	return StaticConfig{
-		FS:        fsys,
-		IndexFile: "index.html",
-	}
-}
-
-// WebAppEnvConfig returns a StaticConfig that reads the filesystem path from an environment variable
-func WebAppEnvConfig(envVar string) StaticConfig {
-	path := os.Getenv(envVar)
-	if path == "" {
+// StaticConfigWithFS returns a StaticConfig with the given filesystem and SPA fallback to index.html.
+// The fsys parameter can be either:
+// - fs.FS (for embedded files)
+// - http.FileSystem (for directory-based files)
+// - nil (will return empty StaticConfig)
+func StaticConfigWithFS(fsys any) StaticConfig {
+	if fsys == nil {
 		return StaticConfig{}
 	}
 	return StaticConfig{
-		FS:        os.DirFS(path),
+		FS:        fsAdapter(fsys),
 		IndexFile: "index.html",
 	}
 }
 
-// StaticSiteConfig returns a StaticConfig optimized for static sites with:
-// - Files from filesystem
-// - SPA fallback to index.html
-func StaticSiteConfig(fsys fs.FS) StaticConfig {
-	return StaticConfig{
-		FS:        fsys,
-		IndexFile: "index.html",
-	}
-}
-
-// StaticSiteEnvConfig returns a StaticConfig that reads the filesystem path from an environment variable
-func StaticSiteEnvConfig(envVar string) StaticConfig {
+// StaticConfigFromEnv returns a StaticConfig that reads the filesystem path from an environment variable.
+// Uses os.DirFS to create the filesystem from the directory path.
+// Returns empty StaticConfig if envVar is not set or empty.
+func StaticConfigFromEnv(envVar string) StaticConfig {
 	path := os.Getenv(envVar)
 	if path == "" {
 		return StaticConfig{}
@@ -95,44 +80,24 @@ func PublicFilesEnvConfig(envVar string) StaticConfig {
 	}
 }
 
-// DefaultWebAppSetup is a one-liner to setup a standard web app configuration
-func DefaultWebAppSetup(r Router, fsys fs.FS) error {
-	return SetupStaticRoutes(r, WebAppConfig(fsys))
+// DefaultStaticSetup is a one-liner to setup static file serving with the given filesystem
+func DefaultStaticSetup(r Router, fsys any) error {
+	return SetupStaticRoutes(r, StaticConfigWithFS(fsys))
 }
 
-// DefaultWebAppEnvSetup is a one-liner to setup web app from env var
-func DefaultWebAppEnvSetup(r Router, envVar string) error {
-	return SetupStaticRoutes(r, WebAppEnvConfig(envVar))
+// DefaultStaticEnvSetup is a one-liner to setup static file serving from an environment variable
+func DefaultStaticEnvSetup(r Router, envVar string) error {
+	return SetupStaticRoutes(r, StaticConfigFromEnv(envVar))
 }
 
-// MustDefaultWebAppSetup is a panic-on-error version of DefaultWebAppSetup
-func MustDefaultWebAppSetup(r Router, fsys fs.FS) {
-	MustSetupStaticRoutes(r, WebAppConfig(fsys))
+// MustDefaultStaticSetup is a panic-on-error version of DefaultStaticSetup
+func MustDefaultStaticSetup(r Router, fsys any) {
+	MustSetupStaticRoutes(r, StaticConfigWithFS(fsys))
 }
 
-// MustDefaultWebAppEnvSetup is a panic-on-error version of DefaultWebAppEnvSetup
-func MustDefaultWebAppEnvSetup(r Router, envVar string) {
-	MustSetupStaticRoutes(r, WebAppEnvConfig(envVar))
-}
-
-// DefaultStaticSiteSetup is a one-liner to setup a standard static site
-func DefaultStaticSiteSetup(r Router, fsys fs.FS) error {
-	return SetupStaticRoutes(r, StaticSiteConfig(fsys))
-}
-
-// DefaultStaticSiteEnvSetup is a one-liner to setup static site from env var
-func DefaultStaticSiteEnvSetup(r Router, envVar string) error {
-	return SetupStaticRoutes(r, StaticSiteEnvConfig(envVar))
-}
-
-// MustDefaultStaticSiteSetup is a panic-on-error version of DefaultStaticSiteSetup
-func MustDefaultStaticSiteSetup(r Router, fsys fs.FS) {
-	MustSetupStaticRoutes(r, StaticSiteConfig(fsys))
-}
-
-// MustDefaultStaticSiteEnvSetup is a panic-on-error version of DefaultStaticSiteEnvSetup
-func MustDefaultStaticSiteEnvSetup(r Router, envVar string) {
-	MustSetupStaticRoutes(r, StaticSiteEnvConfig(envVar))
+// MustDefaultStaticEnvSetup is a panic-on-error version of DefaultStaticEnvSetup
+func MustDefaultStaticEnvSetup(r Router, envVar string) {
+	MustSetupStaticRoutes(r, StaticConfigFromEnv(envVar))
 }
 
 // DefaultPublicFilesSetup is a one-liner to setup public file serving
