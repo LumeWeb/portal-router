@@ -1,7 +1,10 @@
 package router
 
 import (
+	"fmt"
 	swagger "go.lumeweb.com/gswagger"
+	"go.lumeweb.com/portal-middleware/auth/jwt"
+	"go.lumeweb.com/queryutil/filter"
 	"net/http"
 	"strings"
 )
@@ -205,10 +208,121 @@ func createOperatorSchemas(ops []string) map[string]any {
 	return schemas
 }
 
+// Response defines a standardized response structure
+type Response struct {
+	Description string
+	Content     *Content
+	Headers     []Header
+}
+
+// Content defines the response content for a specific media type
+type Content struct {
+	MediaType string
+	Schema    interface{}
+}
+
+// Header represents a single response header
+type Header struct {
+	Name  string
+	Value string
+}
+
+// ResponseOption defines a function type for modifying Response properties
+type ResponseOption func(*Response)
+
 // ResponseError is a placeholder struct to define the schema for error responses.
 // This struct is used by the Swagger documentation generation.
 type ResponseError struct {
 	Error string `json:"error"`
+}
+
+// WithContent creates a ResponseOption that sets the response content
+func WithContent(mediaType string, schema interface{}) ResponseOption {
+	return func(r *Response) {
+		r.Content = &Content{
+			MediaType: mediaType,
+			Schema:    schema,
+		}
+	}
+}
+
+// WithHeader creates a ResponseOption that adds a response header
+func WithHeader(name, description string) ResponseOption {
+	return func(r *Response) {
+		r.Headers = append(r.Headers, Header{
+			Name:  name,
+			Value: description,
+		})
+	}
+}
+
+// WithJSONContent helper for common JSON responses
+func WithJSONContent(schema interface{}) ResponseOption {
+	return WithContent("application/json", schema)
+}
+
+// WithTotalCountHeader adds the X-Total-Count header to a response
+func WithTotalCountHeader() ResponseOption {
+	return WithHeader("X-Total-Count", "Total number of items")
+}
+
+// WithCacheControl helper for cache headers
+func WithCacheControl(value string) ResponseOption {
+	return WithHeader("Cache-Control", value)
+}
+
+// DefineResponse creates a Response with the given status code and options
+func DefineResponse(status int, description string, opts ...ResponseOption) map[int]swagger.ContentValue {
+	r := Response{
+		Description: description,
+	}
+
+	for _, opt := range opts {
+		opt(&r)
+	}
+
+	// Convert to swagger format (internal only)
+	headers := make(map[string]string)
+	for _, h := range r.Headers {
+		headers[h.Name] = h.Value
+	}
+
+	contentValue := swagger.ContentValue{
+		Description: r.Description,
+		Headers:     headers,
+	}
+
+	if r.Content != nil {
+		contentValue.Content = swagger.Content{
+			r.Content.MediaType: swagger.Schema{Value: r.Content.Schema},
+		}
+	}
+
+	return map[int]swagger.ContentValue{
+		status: contentValue,
+	}
+}
+
+// WithSuccessResponse creates a SwaggerOption that adds a success response
+func WithSuccessResponse(status int, description string, opts ...ResponseOption) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		if d.Responses == nil {
+			d.Responses = make(map[int]swagger.ContentValue)
+		}
+		for code, resp := range DefineResponse(status, description, opts...) {
+			d.Responses[code] = resp
+		}
+	}
+}
+
+// WithPaginatedResponse creates a paginated list response helper
+func WithPaginatedResponse(itemType interface{}, paginationMeta interface{}) SwaggerOption {
+	return WithSuccessResponse(http.StatusOK, "Success",
+		WithJSONContent(map[string]interface{}{
+			"items":      []interface{}{itemType},
+			"pagination": paginationMeta,
+		}),
+	)
 }
 
 // DefineSwaggerErrorResponse creates a Swagger-compatible error response definition.
@@ -327,6 +441,65 @@ func WithFilterParam(name, description string, schemaValue any) SwaggerOption {
 	}
 }
 
+// WithFilterParamsFromSchema creates a SwaggerOption that adds all filter parameters
+// from a FieldSchema's FilterOperators() map. Supports multiple formats:
+// - Simple: field_operator=value (e.g. age_gt=30)
+// - Array values: field_operator=value1,value2,value3 or field_operator[]=value1&field_operator[]=value2
+// - Complex: filters[field][operator]=value (e.g. filters[age][gt]=30)
+func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		operators := schema.FilterOperators()
+		for fieldName, ops := range operators {
+			for _, op := range ops {
+				// Validate operator string
+				if _, exists := operatorDocs[op]; !exists {
+					continue // Skip unknown operators
+				}
+				// Determine if this operator expects array values
+				isArrayOp := opIsMultiValue(filter.Operator(op)) ||
+					filter.Operator(op) == filter.OpBetween || filter.Operator(op) == filter.OpNbetween
+
+				// Add simple format param
+				simpleParam := fmt.Sprintf("%s_%s", fieldName, op)
+				paramDesc := fmt.Sprintf("Filter by %s %s",
+					fieldName, strings.ToLower(op))
+
+				if isArrayOp {
+					// Array parameter schema
+					*d = SwaggerFilterParam(*d, simpleParam, paramDesc,
+						map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type": "string", // Will be converted by parser
+							},
+							"style":              "form",
+							"explode":            false,
+							"x-csv":              true,
+							"x-collectionFormat": "multi",
+						})
+				} else {
+					// Single value parameter
+					*d = SwaggerFilterParam(*d, simpleParam, paramDesc, nil)
+				}
+
+				// Add complex format param
+				complexParam := fmt.Sprintf("filters[%s][%s]", fieldName, op)
+				*d = SwaggerFilterParam(*d, complexParam,
+					fmt.Sprintf("Filter by %s %s",
+						fieldName, strings.ToLower(op)),
+					nil)
+			}
+		}
+	}
+}
+
+// opIsMultiValue checks if an operator expects multiple values
+func opIsMultiValue(op filter.Operator) bool {
+	return op == filter.OpIn || op == filter.OpNin ||
+		op == filter.OpIna || op == filter.OpNina ||
+		op == filter.OpBetween || op == filter.OpNbetween
+}
+
 // WithPaginationParams creates a SwaggerOption that adds standard pagination parameters.
 func WithPaginationParams() SwaggerOption {
 	return func(d *swagger.Definitions) {
@@ -345,5 +518,29 @@ func WithSortParams(sortableFields []string) SwaggerOption {
 func WithGlobalSearchParam() SwaggerOption {
 	return func(d *swagger.Definitions) {
 		*d = SwaggerGlobalSearchParam(*d)
+	}
+}
+
+// WithListEndpoint creates a SwaggerOption for a typical list endpoint with pagination, sorting and filtering.
+func WithListEndpoint(
+	summary, description string,
+	purpose jwt.Purpose,
+	itemSchema any,
+	paginationSchema any,
+	sortableFields []string,
+	filterParams []FilterParam,
+	errResp map[int]any,
+) SwaggerOption {
+	return func(d *swagger.Definitions) {
+		*d = ListEndpointSwagger(
+			summary,
+			description,
+			purpose,
+			itemSchema,
+			paginationSchema,
+			sortableFields,
+			filterParams,
+			errResp,
+		)
 	}
 }
