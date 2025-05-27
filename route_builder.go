@@ -11,29 +11,6 @@ const (
 	ACCESS_ADMIN_ROLE = "admin" // Administrator access role
 )
 
-// ResponseError defines a standard error response structure for Swagger documentation
-type ResponseError struct {
-	Error string `json:"error"`
-}
-
-// DefineSwaggerErrorResponse creates a Swagger-compatible error response definition.
-func DefineSwaggerErrorResponse(status int, errorMsg string) map[int]any {
-	return map[int]any{
-		status: ResponseError{Error: errorMsg},
-	}
-}
-
-// DefineSwaggerErrorResponses combines multiple error responses for Swagger docs.
-func DefineSwaggerErrorResponses(responses ...map[int]any) map[int]any {
-	combined := make(map[int]any)
-	for _, r := range responses {
-		for code, resp := range r {
-			combined[code] = resp
-		}
-	}
-	return combined
-}
-
 // RouteOption defines a function type for modifying RouteDefinition properties.
 type RouteOption func(*RouteDefinition)
 
@@ -80,11 +57,23 @@ func WithAccess(accessRole string) RouteOption {
 	}
 }
 
-// WithSwagger creates a RouteOption that sets the Swagger documentation definitions
-// for a route.
-func WithSwagger(def swagger.Definitions) RouteOption {
+// WithCustomErrorResponses creates a RouteOption that adds custom error responses while preserving core defaults.
+// The errors map should use HTTP status codes as keys and response definitions as values (as returned by DefineSwaggerErrorResponse).
+func WithCustomErrorResponses(errors map[int]swagger.ContentValue) RouteOption {
 	return func(d *RouteDefinition) {
-		d.Swagger = def
+		// Get appropriate defaults based on access level
+		var defaultResponses map[int]swagger.ContentValue
+		if d.Access == ACCESS_USER_ROLE || d.Access == ACCESS_ADMIN_ROLE {
+			defaultResponses = DefaultAuthErrorResponses()
+		} else {
+			defaultResponses = DefaultPublicErrorResponses()
+		}
+
+		// Merge defaults with custom responses (custom takes precedence)
+		d.Swagger.Responses = DefineSwaggerErrorResponses(
+			defaultResponses,
+			errors,
+		)
 	}
 }
 

@@ -2,7 +2,6 @@ package router
 
 import (
 	"github.com/stretchr/testify/require"
-	swagger "go.lumeweb.com/gswagger"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -75,74 +74,6 @@ func TestWithMiddlewares(t *testing.T) {
 
 	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger, route.Middlewares...)
 	assert.NoError(t, err)
-}
-
-func TestWithSwagger(t *testing.T) {
-	handler := func(c echo.Context) error { return nil }
-	swaggerDef := swagger.Definitions{
-		Summary: "Test Summary",
-	}
-
-	route := NewRoute("GET", "/test", handler, WithSwagger(swaggerDef))
-
-	assert.Equal(t, "Test Summary", route.Swagger.Summary)
-
-	// Test route can be registered with NewRouter
-	router, err := NewRouter(APIInfo().
-		Title("Test API").
-		Version("1.0.0"))
-	require.NoError(t, err)
-
-	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
-	assert.NoError(t, err)
-}
-
-func TestDefineSwaggerErrorResponse(t *testing.T) {
-	tests := []struct {
-		name      string
-		status    int
-		errorMsg  string
-		wantError string
-	}{
-		{
-			name:      "not found error",
-			status:    http.StatusNotFound,
-			errorMsg:  "Not found",
-			wantError: "Not found",
-		},
-		{
-			name:      "bad request error",
-			status:    http.StatusBadRequest,
-			errorMsg:  "Invalid input",
-			wantError: "Invalid input",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp := DefineSwaggerErrorResponse(tt.status, tt.errorMsg)
-			
-			assert.Contains(t, resp, tt.status)
-			responseVal := resp[tt.status].(ResponseError)
-			assert.Equal(t, tt.wantError, responseVal.Error)
-		})
-	}
-}
-
-func TestDefineSwaggerErrorResponses(t *testing.T) {
-	resp1 := DefineSwaggerErrorResponse(http.StatusNotFound, "Not found")
-	resp2 := DefineSwaggerErrorResponse(http.StatusBadRequest, "Bad request")
-	resp3 := DefineSwaggerErrorResponse(http.StatusInternalServerError, "Server error")
-
-	combined := DefineSwaggerErrorResponses(resp1, resp2, resp3)
-
-	assert.Len(t, combined, 3)
-	assert.Contains(t, combined, http.StatusNotFound)
-	assert.Contains(t, combined, http.StatusBadRequest)
-	assert.Contains(t, combined, http.StatusInternalServerError)
-	
-	notFound := combined[http.StatusNotFound].(ResponseError)
-	assert.Equal(t, "Not found", notFound.Error)
 }
 
 func TestRouteExecution(t *testing.T) {
