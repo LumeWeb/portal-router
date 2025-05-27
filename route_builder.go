@@ -11,6 +11,29 @@ const (
 	ACCESS_ADMIN_ROLE = "admin" // Administrator access role
 )
 
+// ResponseError defines a standard error response structure for Swagger documentation
+type ResponseError struct {
+	Error string `json:"error"`
+}
+
+// DefineSwaggerErrorResponse creates a Swagger-compatible error response definition.
+func DefineSwaggerErrorResponse(status int, errorMsg string) map[int]any {
+	return map[int]any{
+		status: ResponseError{Error: errorMsg},
+	}
+}
+
+// DefineSwaggerErrorResponses combines multiple error responses for Swagger docs.
+func DefineSwaggerErrorResponses(responses ...map[int]any) map[int]any {
+	combined := make(map[int]any)
+	for _, r := range responses {
+		for code, resp := range r {
+			combined[code] = resp
+		}
+	}
+	return combined
+}
+
 // RouteOption defines a function type for modifying RouteDefinition properties.
 type RouteOption func(*RouteDefinition)
 
