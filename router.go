@@ -72,6 +72,15 @@ func NewSwaggerRouter(echoRouter *echo.Echo, info APIInfoDefinition) (Router, er
 	return router, nil
 }
 
+// UpdateRouterInfo updates the OpenAPI info for a router using the provided APIInfoDefinition
+func UpdateRouterInfo(r Router, info APIInfoDefinition) {
+	// Convert the API info to OpenAPI format
+	openapiInfo := info.toOpenAPI()
+
+	// Update the router's info
+	r.SetInfo(openapiInfo)
+}
+
 // RouterOption defines a function type for configuring an Echo router.
 type RouterOption func(*echo.Echo)
 
