@@ -17,6 +17,8 @@ const (
 	StaticAssetsPath = "/assets"
 	// StaticAssetsDir is the directory name where static assets are stored
 	StaticAssetsDir = "assets"
+	// DefaultIndexFile is the default filename to serve for SPA fallback
+	DefaultIndexFile = "index.html"
 )
 
 // httpToFS implements fs.FS by wrapping an http.FileSystem.
@@ -54,7 +56,7 @@ func fsAdapter(fsys any) fs.FS {
 
 // Predefined configurations for common static file setups
 
-// StaticConfigWithFS returns a StaticConfig with the given filesystem and SPA fallback to index.html.
+// StaticConfigWithFS returns a StaticConfig with the given filesystem and SPA fallback to DefaultIndexFile.
 // The fsys parameter can be either:
 // - fs.FS (for embedded files)
 // - http.FileSystem (for directory-based files)
@@ -65,7 +67,7 @@ func StaticConfigWithFS(fsys any) StaticConfig {
 	}
 	return StaticConfig{
 		FS:        fsAdapter(fsys),
-		IndexFile: "index.html",
+		IndexFile: DefaultIndexFile,
 	}
 }
 
@@ -79,7 +81,7 @@ func StaticConfigFromEnv(envVar string) StaticConfig {
 	}
 	return StaticConfig{
 		FS:        os.DirFS(path),
-		IndexFile: "index.html",
+		IndexFile: DefaultIndexFile,
 	}
 }
 
@@ -185,7 +187,7 @@ type StaticConfig struct {
 func SetupStaticRoutes(r Router, cfg StaticConfig) error {
 	// Validate configuration
 	if cfg.FS != nil && cfg.IndexFile == "" {
-		return errors.New("IndexFile is required when using FS")
+		cfg.IndexFile = DefaultIndexFile
 	}
 
 	echoRouter := GetRouter(r)
@@ -236,6 +238,9 @@ func SetupStaticRoutes(r Router, cfg StaticConfig) error {
 // All requests not under "/api/" will return the specified index file.
 // API routes are excluded to allow proper 404 responses for invalid API calls.
 func setupSPAFallback(echoRouter *echo.Echo, fsys fs.FS, indexFile string) error {
+	if indexFile == "" {
+		indexFile = DefaultIndexFile
+	}
 	echoRouter.GET("/*", func(c echo.Context) error {
 		if strings.HasPrefix(c.Request().URL.Path, "/api/") {
 			return echo.ErrNotFound

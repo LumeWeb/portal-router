@@ -271,6 +271,26 @@ func TestSetupStaticRoutes(t *testing.T) {
 	r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
 	require.NoError(t, err)
 
+	t.Run("fs with empty index file uses default", func(t *testing.T) {
+		mockFS := fstest.MapFS{
+			DefaultIndexFile: &fstest.MapFile{
+				Data: []byte("<html>default</html>"),
+			},
+		}
+		err := SetupStaticRoutes(r, StaticConfig{
+			FS:        mockFS,
+			IndexFile: "",
+		})
+		assert.NoError(t, err)
+
+		req := httptest.NewRequest("GET", "/", nil)
+		rr := httptest.NewRecorder()
+		GetRouter(r).ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "<html>default</html>", rr.Body.String())
+	})
+
 	t.Run("invalid config", func(t *testing.T) {
 		err := SetupStaticRoutes(r, StaticConfig{})
 		assert.Error(t, err)
