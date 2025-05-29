@@ -6,30 +6,49 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 )
 
-// httpToFS wraps an http.FileSystem to implement fs.FS
+const (
+	// StaticAssetsPath is the URL path prefix for static assets
+	StaticAssetsPath = "/assets"
+	// StaticAssetsDir is the directory name where static assets are stored
+	StaticAssetsDir = "assets"
+)
+
+// httpToFS implements fs.FS by wrapping an http.FileSystem.
+// This allows using http.FileSystem implementations (like http.Dir) 
+// where fs.FS is required.
 type httpToFS struct {
 	fs http.FileSystem
 }
 
-// Open implements fs.FS.Open
+// Open opens the named file for reading using the underlying http.FileSystem.
+// Implements fs.FS interface.
 func (h httpToFS) Open(name string) (fs.File, error) {
 	return h.fs.Open(name)
 }
 
-// fsAdapter adapts between fs.FS and http.FileSystem interfaces
+// fsAdapter converts between filesystem interfaces.
+// Accepts either:
+// - fs.FS (returned as-is)
+// - http.FileSystem (wrapped in httpToFS)
+// - nil (returns nil)
+// Panics for any other input type.
 func fsAdapter(fsys any) fs.FS {
+	if fsys == nil {
+		return nil
+	}
 	switch v := fsys.(type) {
 	case fs.FS:
 		return v
 	case http.FileSystem:
 		return &httpToFS{fs: v}
 	default:
-		panic("fsAdapter: unsupported filesystem type")
+		panic(fmt.Sprintf("fsAdapter: unsupported filesystem type %T", fsys))
 	}
 }
 
@@ -120,53 +139,102 @@ func MustDefaultPublicFilesEnvSetup(r Router, envVar string) {
 	MustSetupStaticRoutes(r, PublicFilesEnvConfig(envVar))
 }
 
-// StaticConfig holds configuration for static file serving
+// StaticConfig defines configuration options for serving static files.
+// Only one of these fields should be set:
+// - DirPath or EnvVar for directory-based serving
+// - FS for embedded filesystems
+// - DefaultHandler for custom handler fallback
 type StaticConfig struct {
-	DirPath        string       // Path to directory for static files
-	EnvVar         string       // Environment variable containing path to directory
-	DefaultHandler http.Handler // Fallback handler if DirPath is empty
-	FS             fs.FS        // Filesystem for embedded static files
-	IndexFile      string       // Name of index file for SPA fallback (required when using FS)
+	// DirPath is the filesystem path to the directory containing static files.
+	// If empty, EnvVar will be checked instead.
+	DirPath string
+
+	// EnvVar specifies an environment variable containing the static files directory path.
+	// Only used if DirPath is empty.
+	EnvVar string
+
+	// DefaultHandler is used as a fallback handler when no directory or FS is provided.
+	// Typically an http.FileServer or similar.
+	DefaultHandler http.Handler
+
+	// FS specifies an embedded filesystem (like embed.FS) to serve files from.
+	// Requires IndexFile to be set for SPA fallback behavior.
+	FS fs.FS
+
+	// IndexFile is the name of the fallback file to serve for SPA routes (e.g. "index.html").
+	// Required when FS is set.
+	IndexFile string
 }
 
-// SetupStaticRoutes configures static file serving and SPA fallback routes.
-// It supports both regular directories and embedded filesystems.
+// SetupStaticRoutes configures static file serving routes with optional SPA fallback.
+//
+// Supports multiple configuration methods:
+// - Directory-based serving via DirPath/EnvVar
+// - Embedded filesystems via FS
+// - Custom handler fallback via DefaultHandler
+//
+// When using FS, IndexFile must be specified for SPA fallback behavior.
+// Directory-based serving will automatically serve the index file for root requests.
+//
+// Static assets are served under StaticAssetsPath ("/assets") by default.
+// All other requests fall back to the index file for SPA behavior.
+//
+// Returns an error if:
+// - FS is set but IndexFile is empty
+// - No valid configuration is provided
 func SetupStaticRoutes(r Router, cfg StaticConfig) error {
 	// Validate configuration
-	if cfg.DirPath == "" && cfg.DefaultHandler == nil && cfg.FS == nil && cfg.EnvVar == "" {
-		return errors.New("must provide either DirPath, DefaultHandler, FS or EnvVar")
-	}
 	if cfg.FS != nil && cfg.IndexFile == "" {
 		return errors.New("IndexFile is required when using FS")
 	}
 
 	echoRouter := GetRouter(r)
 
-	// Handle embedded filesystem case
-	if cfg.FS != nil {
-		echoRouter.StaticFS("/assets", fsAdapter(cfg.FS))
-		return setupSPAFallback(echoRouter, cfg.FS, cfg.IndexFile)
-	}
-
-	// Handle regular directory case
+	// Handle filesystem case (embedded or directory)
 	var handler http.Handler
-	dirPath := cfg.DirPath
-	if dirPath == "" && cfg.EnvVar != "" {
-		dirPath = os.Getenv(cfg.EnvVar)
+	var fsys fs.FS
+
+	if cfg.FS != nil {
+		fsys = cfg.FS
+		// Try to get subdirectory for assets if it exists
+		var staticFS = fsys
+		if _, err := fs.Stat(fsys, StaticAssetsDir); err == nil {
+			subFs, err := fs.Sub(fsys, StaticAssetsDir)
+			if err == nil {
+				staticFS = subFs
+			}
+		}
+		echoRouter.StaticFS(StaticAssetsPath, fsAdapter(staticFS))
+	} else {
+		dirPath := cfg.DirPath
+		if dirPath == "" && cfg.EnvVar != "" {
+			dirPath = os.Getenv(cfg.EnvVar)
+		}
+
+		if dirPath != "" {
+			assetsPath := filepath.Join(dirPath, StaticAssetsDir)
+			fsys = os.DirFS(dirPath)
+			handler = http.FileServer(http.Dir(dirPath))
+			echoRouter.Static(StaticAssetsPath, assetsPath)
+		} else if cfg.DefaultHandler != nil {
+			handler = cfg.DefaultHandler
+		}
 	}
 
-	if dirPath != "" {
-		handler = http.FileServer(http.Dir(dirPath))
-		echoRouter.Static("/assets/*", dirPath)
-	} else if cfg.DefaultHandler != nil {
-		handler = cfg.DefaultHandler
-	} else {
-		return errors.New("must provide either valid DirPath (from EnvVar or directly), DefaultHandler or FS")
+	if fsys != nil {
+		return setupSPAFallback(echoRouter, fsys, cfg.IndexFile)
 	}
-	return setupDirectoryFallback(echoRouter, handler)
+	if handler != nil {
+		return setupDirectoryFallback(echoRouter, handler)
+	}
+	return errors.New("must provide either DirPath, DefaultHandler, FS or EnvVar")
 }
 
-// setupSPAFallback configures the SPA fallback route for embedded filesystems
+// setupSPAFallback configures route handlers to serve the index file for all unmatched paths,
+// enabling single-page application behavior.
+//
+// All requests not under "/api/" will return the specified index file.
+// API routes are excluded to allow proper 404 responses for invalid API calls.
 func setupSPAFallback(echoRouter *echo.Echo, fsys fs.FS, indexFile string) error {
 	echoRouter.GET("/*", func(c echo.Context) error {
 		if strings.HasPrefix(c.Request().URL.Path, "/api/") {
@@ -184,7 +252,11 @@ func setupSPAFallback(echoRouter *echo.Echo, fsys fs.FS, indexFile string) error
 	return nil
 }
 
-// setupDirectoryFallback configures the fallback route for directory-based serving
+// setupDirectoryFallback configures route handlers to serve files from a directory
+// using the provided http.Handler.
+//
+// All requests not under "/api/" will be handled by the provided handler.
+// API routes are excluded to allow proper 404 responses for invalid API calls.
 func setupDirectoryFallback(echoRouter *echo.Echo, handler http.Handler) error {
 	echoRouter.GET("/*", func(c echo.Context) error {
 		if !strings.HasPrefix(c.Request().URL.Path, "/api/") {
@@ -196,7 +268,9 @@ func setupDirectoryFallback(echoRouter *echo.Echo, handler http.Handler) error {
 	return nil
 }
 
-// MustSetupStaticRoutes is a panic-on-error version of SetupStaticRoutes
+// MustSetupStaticRoutes wraps SetupStaticRoutes and panics if configuration fails.
+// Intended for use during application initialization where configuration errors
+// should fail fast.
 func MustSetupStaticRoutes(r Router, cfg StaticConfig) {
 	if err := SetupStaticRoutes(r, cfg); err != nil {
 		panic(fmt.Sprintf("Failed to setup static routes: %v", err))
