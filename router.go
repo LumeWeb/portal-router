@@ -20,18 +20,35 @@ const (
 
 type Router = *swagger.Router[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]
 
-// GetRouter returns the underlying echo.Echo from a router.Router
+// GetRouter returns the underlying echo router (either *echo.Echo or *echo.Group)
 func GetRouter(r Router) *echo.Echo {
-	return swagger.GetRouter[*echo.Echo, echo.HandlerFunc, echo.MiddlewareFunc, es.Route](r.Router())
+	if r == nil {
+		return nil
+	}
+
+	// Get the framework router interface
+	frameworkRouter := r.Router().Router(false)
+
+	// Try to cast directly to *echo.Echo first
+	if e, ok := frameworkRouter.(*echo.Echo); ok {
+		return e
+	}
+
+	// Fallback for other cases
+	return nil
 }
 
-// GetGroupRouter returns the underlying echo.Group from a router.Router if it is a group
-func GetGroupRouter(r Router) *echo.Group {
-	router := r.Router().Router()
-	if group, ok := router.(*echo.Group); ok {
-		return group
+// GetGroup returns the underlying *echo.Group instance
+func GetGroup(r Router) *echo.Group {
+	router := r.Router().Router(true)
+	if g, ok := router.(*echo.Group); ok {
+		return g
 	}
 	return nil
+}
+
+func GetGroupRouter(r Router) *echo.Group {
+	return GetGroup(r)
 }
 
 // NewSwaggerRouter creates a new gswagger Router instance from an echo.Echo with default OpenAPI options.
@@ -54,17 +71,38 @@ func GetGroupRouter(r Router) *echo.Group {
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-func NewSwaggerRouter(echoRouter *echo.Echo, info APIInfoDefinition) (Router, error) {
-	router, err := swagger.NewRouter(es.NewRouter(echoRouter), swagger.Options[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]{
-		JSONDocumentationPath: SwaggerJSONPath,
-		YAMLDocumentationPath: SwaggerYAMLPath,
-		Openapi: &openapi3.T{
+func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, error) {
+	// Initialize config with defaults
+	config := &RouterConfig{
+		EchoRouter: echo.New(),
+		OpenAPI: &openapi3.T{
 			Info: info.toOpenAPI(),
 		},
-		FrameworkRouterFactory: func() apirouter.Router[echo.HandlerFunc, echo.MiddlewareFunc, es.Route] {
-			return es.NewRouter(echo.New())
+		Options: swagger.Options[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]{
+			JSONDocumentationPath: SwaggerJSONPath,
+			YAMLDocumentationPath: SwaggerYAMLPath,
+			FrameworkRouterFactory: func() apirouter.Router[echo.HandlerFunc, echo.MiddlewareFunc, es.Route] {
+				return es.NewRouter(echo.New())
+			},
 		},
-	})
+	}
+
+	// Apply all options
+	applyRouterOptions(config, opts...)
+
+	// Create router with final config
+	options := config.Options
+	if config.PathPrefix != "" {
+		options.PathPrefix = config.PathPrefix
+	}
+	if config.OpenAPI != nil {
+		options.Openapi = config.OpenAPI
+	}
+
+	router, err := swagger.NewRouter(
+		es.NewRouter(config.EchoRouter),
+		options,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -81,13 +119,49 @@ func UpdateRouterInfo(r Router, info APIInfoDefinition) {
 	r.SetInfo(openapiInfo)
 }
 
-// RouterOption defines a function type for configuring an Echo router.
-type RouterOption func(*echo.Echo)
+// RouterConfig holds configuration for router initialization
+type RouterConfig struct {
+	EchoRouter *echo.Echo
+	OpenAPI    *openapi3.T
+	Options    swagger.Options[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]
+	PathPrefix string
+}
 
-// applyRouterOptions applies all router configuration options to the given Echo instance.
-func applyRouterOptions(e *echo.Echo, opts ...RouterOption) {
+// RouterOption defines a function type for configuring router initialization.
+type RouterOption func(*RouterConfig)
+
+// applyRouterOptions applies all router configuration options
+func applyRouterOptions(c *RouterConfig, opts ...RouterOption) {
 	for _, opt := range opts {
-		opt(e)
+		opt(c)
+	}
+}
+
+// WithRouterJSONDocsPath sets the path for JSON documentation
+func WithRouterJSONDocsPath(path string) RouterOption {
+	return func(c *RouterConfig) {
+		c.Options.JSONDocumentationPath = path
+	}
+}
+
+// WithRouterYAMLDocsPath sets the path for YAML documentation
+func WithRouterYAMLDocsPath(path string) RouterOption {
+	return func(c *RouterConfig) {
+		c.Options.YAMLDocumentationPath = path
+	}
+}
+
+// WithRouterBasePath sets the base path prefix for all routes
+func WithRouterBasePath(path string) RouterOption {
+	return func(c *RouterConfig) {
+		c.PathPrefix = path
+	}
+}
+
+// WithRouterOpenAPI allows custom OpenAPI configuration
+func WithRouterOpenAPI(openapi *openapi3.T) RouterOption {
+	return func(c *RouterConfig) {
+		c.OpenAPI = openapi
 	}
 }
 
@@ -111,10 +185,7 @@ func applyRouterOptions(e *echo.Echo, opts ...RouterOption) {
 //	    log.Fatal(err)
 //	}
 func NewRouter(info APIInfoDefinition, opts ...RouterOption) (Router, error) {
-	e := echo.New()
-	applyRouterOptions(e, opts...)
-
-	return NewSwaggerRouter(e, info)
+	return NewSwaggerRouter(info, opts...)
 }
 
 // ListEndpointSwagger generates Swagger definitions for a list endpoint.
