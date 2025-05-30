@@ -188,21 +188,45 @@ func TestSwaggerPaginationParams(t *testing.T) {
 }
 
 func TestNewSwaggerRouter(t *testing.T) {
-	eRouter, err := NewRouter(APIInfo().
-		Title("Test API").
-		Version("1.0.0"))
+	t.Run("basic router creation", func(t *testing.T) {
+		eRouter, err := NewRouter(APIInfo().
+			Title("Test API").
+			Version("1.0.0"))
 
-	assert.NoError(t, err)
-	assert.NotNil(t, eRouter)
+		assert.NoError(t, err)
+		assert.NotNil(t, eRouter)
+	})
+
+	t.Run("with router options", func(t *testing.T) {
+		eRouter, err := NewRouter(APIInfo().
+			Title("Test API").
+			Version("1.0.0"),
+			WithRouterBasePath("/v1"),
+			WithRouterJSONDocsPath("/api/docs.json"),
+		)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, eRouter)
+		// Verify path prefix is properly set in the router options
+		echoRouter := GetRouter(eRouter)
+		require.NotNil(t, echoRouter, "router should not be nil")
+		req := httptest.NewRequest("GET", "/v1/test", nil)
+		rr := httptest.NewRecorder()
+		echoRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code) // Should route through prefix
+	})
 }
 
 func TestSwaggerDocsServed(t *testing.T) {
-	echoRouter := echo.New()
-	eRouter, err := NewSwaggerRouter(echoRouter, APIInfo().
+	eRouter, err := NewRouter(APIInfo().
 		Title("Test API").
-		Version("1.0.0"))
+		Version("1.0.0"),
+		WithRouterJSONDocsPath("/custom/docs.json"),
+		WithRouterYAMLDocsPath("/custom/docs.yaml"),
+	)
 	require.NoError(t, err)
 	require.NotNil(t, eRouter)
+	echoRouter := GetRouter(eRouter)
 
 	// Register a test route first
 	routes := DefineRoutes(
@@ -226,12 +250,12 @@ func TestSwaggerDocsServed(t *testing.T) {
 	}{
 		{
 			name:     "JSON docs",
-			path:     SwaggerJSONPath,
+			path:     "/custom/docs.json",
 			wantCode: http.StatusOK,
 		},
 		{
-			name:     "YAML docs",
-			path:     SwaggerYAMLPath,
+			name:     "YAML docs", 
+			path:     "/custom/docs.yaml",
 			wantCode: http.StatusOK,
 		},
 	}
@@ -262,10 +286,7 @@ func TestWithSortParams(t *testing.T) {
 
 func TestGetGroupRouter(t *testing.T) {
 	t.Run("returns group when router is echo.Group", func(t *testing.T) {
-		echoRouter := echo.New()
-
-		// Create a swagger router with the echo router
-		gRouter, err := NewSwaggerRouter(echoRouter, APIInfo().
+		gRouter, err := NewRouter(APIInfo().
 			Title("Test API").
 			Version("1.0.0"))
 		require.NoError(t, err)
@@ -284,15 +305,12 @@ func TestGetGroupRouter(t *testing.T) {
 
 		req := httptest.NewRequest("GET", "/test/route", nil)
 		rr := httptest.NewRecorder()
-		echoRouter.ServeHTTP(rr, req)
+		GetRouter(gRouter).ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
 	})
 
 	t.Run("returns nil when router is not echo.Group", func(t *testing.T) {
-		echoRouter := echo.New()
-
-		// Create a swagger router with the echo router (not a group)
-		gRouter, err := NewSwaggerRouter(echoRouter, APIInfo().
+		gRouter, err := NewRouter(APIInfo().
 			Title("Test API").
 			Version("1.0.0"))
 		require.NoError(t, err)

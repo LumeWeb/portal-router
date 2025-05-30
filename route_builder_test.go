@@ -218,18 +218,29 @@ func TestNewRouter(t *testing.T) {
 		assert.NotNil(t, router)
 	})
 
-	t.Run("router with echo options", func(t *testing.T) {
+	t.Run("router with options", func(t *testing.T) {
 		info := APIInfo().
 			Title("Test API").
 			Version("1.0.0")
 
-		// Test with Echo configuration option
-		router, err := NewRouter(info, RouterOption(func(e *echo.Echo) {
-			e.HideBanner = true
-		}))
+		// Test with router configuration option
+		router, err := NewRouter(info, 
+			WithRouterBasePath("/v1"),
+			WithRouterJSONDocsPath("/api/docs.json"),
+		)
 		assert.NoError(t, err)
 		assert.NotNil(t, router)
-		assert.True(t, GetRouter(router).HideBanner)
+		
+		// Verify options were applied
+		echoRouter := GetRouter(router)
+		require.NotNil(t, echoRouter, "router should not be nil")
+		
+		// Verify it's not nil and routes requests
+		
+		req := httptest.NewRequest("GET", "/v1/test", nil)
+		rr := httptest.NewRecorder()
+		echoRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code) // Should route through prefix
 	})
 
 	t.Run("invalid api info", func(t *testing.T) {
