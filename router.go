@@ -38,6 +38,7 @@ func GetRouter(r Router) *echo.Echo {
 	return nil
 }
 
+
 // GetGroup returns the underlying *echo.Group instance
 func GetGroup(r Router) *echo.Group {
 	router := r.Router().Router(true)
@@ -77,6 +78,11 @@ func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, err
 		EchoRouter: echo.New(),
 		OpenAPI: &openapi3.T{
 			Info: info.toOpenAPI(),
+			Servers: []*openapi3.Server{
+				{
+					URL: "/api",
+				},
+			},
 		},
 		Options: swagger.Options[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]{
 			JSONDocumentationPath: SwaggerJSONPath,
@@ -162,6 +168,32 @@ func WithRouterBasePath(path string) RouterOption {
 func WithRouterOpenAPI(openapi *openapi3.T) RouterOption {
 	return func(c *RouterConfig) {
 		c.OpenAPI = openapi
+	}
+}
+
+// WithServer adds a server URL to the OpenAPI spec
+func WithServer(url string, description string) RouterOption {
+	return func(c *RouterConfig) {
+		if c.OpenAPI == nil {
+			return
+		}
+		if c.OpenAPI.Servers == nil {
+			c.OpenAPI.Servers = []*openapi3.Server{}
+		}
+		c.OpenAPI.Servers = append(c.OpenAPI.Servers, &openapi3.Server{
+			URL:         url,
+			Description: description,
+		})
+	}
+}
+
+// WithServers replaces all server URLs in the OpenAPI spec
+func WithServers(servers []*openapi3.Server) RouterOption {
+	return func(c *RouterConfig) {
+		if c.OpenAPI == nil {
+			return
+		}
+		c.OpenAPI.Servers = servers
 	}
 }
 
