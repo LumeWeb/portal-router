@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"github.com/invopop/jsonschema"
 	"go.lumeweb.com/gswagger/apirouter"
 	"net/http"
 	"strings"
@@ -103,6 +104,9 @@ func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, err
 	if config.OpenAPI != nil {
 		options.Openapi = config.OpenAPI
 	}
+	if config.ReflectorOptions != nil {
+		options.ReflectorOptions = config.ReflectorOptions
+	}
 
 	router, err := swagger.NewRouter(
 		es.NewRouter(config.EchoRouter),
@@ -126,10 +130,11 @@ func UpdateRouterInfo(r Router, info APIInfoDefinition) {
 
 // RouterConfig holds configuration for router initialization
 type RouterConfig struct {
-	EchoRouter *echo.Echo
-	OpenAPI    *openapi3.T
-	Options    swagger.Options[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]
-	PathPrefix string
+	EchoRouter       *echo.Echo
+	OpenAPI          *openapi3.T
+	Options          swagger.Options[echo.HandlerFunc, echo.MiddlewareFunc, es.Route]
+	PathPrefix       string
+	ReflectorOptions *jsonschema.Reflector
 }
 
 // RouterOption defines a function type for configuring router initialization.
@@ -167,6 +172,14 @@ func WithRouterBasePath(path string) RouterOption {
 func WithRouterOpenAPI(openapi *openapi3.T) RouterOption {
 	return func(c *RouterConfig) {
 		c.OpenAPI = openapi
+	}
+}
+
+// WithReflectorOptions configures the jsonschema reflector options
+// used for schema generation.
+func WithReflectorOptions(opts *jsonschema.Reflector) RouterOption {
+	return func(c *RouterConfig) {
+		c.ReflectorOptions = opts
 	}
 }
 
