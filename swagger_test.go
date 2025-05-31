@@ -658,6 +658,95 @@ func TestDefineSwaggerErrorResponse(t *testing.T) {
 	}
 }
 
+func TestMergeResponses(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []map[int]swagger.ContentValue
+		expected map[int]swagger.ContentValue
+	}{
+		{
+			name: "empty inputs",
+			input: []map[int]swagger.ContentValue{
+				{},
+				{},
+			},
+			expected: map[int]swagger.ContentValue{},
+		},
+		{
+			name: "merge success responses",
+			input: []map[int]swagger.ContentValue{
+				{
+					200: {Description: "Success A"},
+					400: {Description: "Error A"},
+				},
+				{
+					201: {Description: "Success B"},
+					401: {Description: "Error B"},
+				},
+			},
+			expected: map[int]swagger.ContentValue{
+				200: {Description: "Success A"},
+				201: {Description: "Success B"},
+				400: {Description: "Error A"},
+				401: {Description: "Error B"},
+			},
+		},
+		{
+			name: "preserve first success response",
+			input: []map[int]swagger.ContentValue{
+				{
+					200: {Description: "First Success"},
+				},
+				{
+					200: {Description: "Second Success"},
+				},
+			},
+			expected: map[int]swagger.ContentValue{
+				200: {Description: "First Success"},
+			},
+		},
+		{
+			name: "override error responses",
+			input: []map[int]swagger.ContentValue{
+				{
+					400: {Description: "First Error"},
+				},
+				{
+					400: {Description: "Second Error"},
+				},
+			},
+			expected: map[int]swagger.ContentValue{
+				400: {Description: "Second Error"},
+			},
+		},
+		{
+			name: "mixed success and error responses",
+			input: []map[int]swagger.ContentValue{
+				{
+					200: {Description: "Success"},
+					400: {Description: "First Error"},
+				},
+				{
+					201: {Description: "New Success"},
+					400: {Description: "New Error"},
+				},
+			},
+			expected: map[int]swagger.ContentValue{
+				200: {Description: "Success"},
+				201: {Description: "New Success"},
+				400: {Description: "New Error"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MergeResponses(tt.input...)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestDefaultCoreErrorResponses(t *testing.T) {
 	core := DefaultCoreErrorResponses()
 
@@ -738,7 +827,7 @@ func TestWithErrorResponses(t *testing.T) {
 					},
 				},
 			},
-			expectedCodes: []int{400, 404, 500, 422, 429},
+			expectedCodes: []int{200, 400, 404, 422, 429, 500},
 		},
 		{
 			name:       "auth route with string errors",
@@ -761,7 +850,7 @@ func TestWithErrorResponses(t *testing.T) {
 					},
 				},
 			},
-			expectedCodes: []int{400, 401, 403, 404, 500, 409, 503},
+			expectedCodes: []int{200, 400, 401, 403, 404, 409, 500, 503},
 		},
 	}
 
@@ -773,6 +862,125 @@ func TestWithErrorResponses(t *testing.T) {
 			assert.Len(t, route.Swagger.Responses, len(tt.expectedCodes))
 			for _, code := range tt.expectedCodes {
 				assert.Contains(t, route.Swagger.Responses, code)
+			}
+		})
+	}
+}
+
+func TestSuccessResponsePreservation(t *testing.T) {
+	tests := []struct {
+		name         string
+		successCode  int
+		errorCode    int
+		successFirst bool
+	}{
+		{
+			name:         "success before errors",
+			successCode:  200,
+			errorCode:    400,
+			successFirst: true,
+		},
+		{
+			name:         "success after errors",
+			successCode:  201,
+			errorCode:    500,
+			successFirst: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create route with success response
+			route := NewRoute("GET", "/test", nil)
+			
+			// Apply options in specified order
+			if tt.successFirst {
+				WithSuccessResponse(tt.successCode, "Success", WithJSONContent("success"))(&route.Swagger, "")
+				WithErrorResponses(map[int]swagger.ContentValue{
+					tt.errorCode: {
+						Description: "Error",
+						Content: map[string]swagger.Schema{
+							"application/json": {
+								Value: ResponseError{Error: "Error"},
+							},
+						},
+					},
+				})(&route.Swagger, "")
+			} else {
+				WithErrorResponses(map[int]swagger.ContentValue{
+					tt.errorCode: {
+						Description: "Error",
+						Content: map[string]swagger.Schema{
+							"application/json": {
+								Value: ResponseError{Error: "Error"},
+							},
+						},
+					},
+				})(&route.Swagger, "")
+				WithSuccessResponse(tt.successCode, "Success", WithJSONContent("success"))(&route.Swagger, "")
+			}
+
+			// Verify both responses exist
+			assert.Contains(t, route.Swagger.Responses, tt.successCode)
+			assert.Contains(t, route.Swagger.Responses, tt.errorCode)
+			
+			// Verify success response wasn't overwritten
+			successResp := route.Swagger.Responses[tt.successCode]
+			assert.Equal(t, "Success", successResp.Description)
+			// Handle both string and default success response formats
+			switch v := successResp.Content["application/json"].Value.(type) {
+			case string:
+				assert.Equal(t, "success", v)
+			case map[string]string:
+				assert.Equal(t, "success", v["status"])
+			default:
+				t.Errorf("unexpected success response type: %T", v)
+			}
+		})
+	}
+}
+
+func TestDefaultResponsesNotOverwritingSuccess(t *testing.T) {
+	tests := []struct {
+		name        string
+		accessRole  string
+		successCode int
+	}{
+		{
+			name:        "public route",
+			accessRole:  "",
+			successCode: 200,
+		},
+		{
+			name:        "auth route", 
+			accessRole:  ACCESS_USER_ROLE,
+			successCode: 201,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			route := NewRoute("GET", "/test", nil, WithAccess(tt.accessRole))
+			
+			// Add success response first
+			WithSuccessResponse(tt.successCode, "Success", WithJSONContent("success"))(&route.Swagger, tt.accessRole)
+			
+			// Then add default error responses via WithSwagger
+			WithSwagger()(&route)
+
+			// Verify success response still exists
+			assert.Contains(t, route.Swagger.Responses, tt.successCode)
+			successResp := route.Swagger.Responses[tt.successCode]
+			assert.Equal(t, "Success", successResp.Description)
+			assert.Equal(t, "success", successResp.Content["application/json"].Value)
+
+			// Verify default error responses were added
+			if tt.accessRole == "" {
+				assert.Contains(t, route.Swagger.Responses, http.StatusBadRequest)
+				assert.Contains(t, route.Swagger.Responses, http.StatusNotFound)
+			} else {
+				assert.Contains(t, route.Swagger.Responses, http.StatusUnauthorized)
+				assert.Contains(t, route.Swagger.Responses, http.StatusForbidden)
 			}
 		})
 	}
