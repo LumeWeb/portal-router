@@ -125,18 +125,29 @@ func WithDescription(description string) SwaggerOption {
 
 // WithSwagger creates a RouteOption that sets the Swagger documentation definitions
 // for a route. Automatically includes appropriate error responses based on access level.
+// Preserves any existing success responses (2xx status codes) and allows custom
+// success responses from options to be merged.
 func WithSwagger(opts ...SwaggerOption) RouteOption {
 	return func(d *RouteDefinition) {
-		// Start with default error responses based on access level
-		def := swagger.Definitions{}
+		// Get default error responses based on access level
+		var defaultErrors map[int]swagger.ContentValue
 		if d.Access == ACCESS_USER_ROLE || d.Access == ACCESS_ADMIN_ROLE {
-			def.Responses = DefaultAuthErrorResponses()
+			defaultErrors = DefaultAuthErrorResponses()
 		} else {
-			def.Responses = DefaultPublicErrorResponses()
+			defaultErrors = DefaultPublicErrorResponses()
 		}
 
-		// Apply user-provided options
-		d.Swagger = applySwaggerOpts(def, d.Access, opts)
+		// Initialize responses if nil
+		if d.Swagger.Responses == nil {
+			d.Swagger.Responses = make(map[int]swagger.ContentValue)
+		}
+
+		// Merge default error responses into existing responses, preserving existing success responses
+		d.Swagger.Responses = MergeResponses(d.Swagger.Responses, defaultErrors)
+
+		// Apply user-provided options directly to d.Swagger
+		// This allows options like WithSuccessResponse to add/modify responses
+		d.Swagger = applySwaggerOpts(d.Swagger, d.Access, opts)
 	}
 }
 
@@ -296,15 +307,20 @@ func DefineResponse(status int, description string, opts ...ResponseOption) map[
 	}
 }
 
-// WithSuccessResponse creates a SwaggerOption that adds a success response
+// WithSuccessResponse creates a SwaggerOption that adds a success response while preserving existing responses.
+// The success response will not overwrite any existing response for the same status code.
 func WithSuccessResponse(status int, description string, opts ...ResponseOption) SwaggerOption {
 	return func(d *swagger.Definitions, accessRole string) {
+		// Initialize responses if nil
 		if d.Responses == nil {
 			d.Responses = make(map[int]swagger.ContentValue)
 		}
-		for code, resp := range DefineResponse(status, description, opts...) {
-			d.Responses[code] = resp
-		}
+
+		// Create the new success response
+		newResponse := DefineResponse(status, description, opts...)
+		
+		// Merge with existing responses, allowing our new response to override existing ones
+		d.Responses = MergeResponses(newResponse, d.Responses)
 	}
 }
 
@@ -332,15 +348,34 @@ func DefineSwaggerErrorResponse(status int, errorMsg string) map[int]swagger.Con
 	}
 }
 
-// DefineSwaggerErrorResponses combines multiple error responses for Swagger docs.
-func DefineSwaggerErrorResponses(responses ...map[int]swagger.ContentValue) map[int]swagger.ContentValue {
+// MergeResponses combines multiple response maps while preserving success responses (2xx).
+// Later responses override earlier ones for the same status code, except success responses
+// which are preserved from their first occurrence.
+func MergeResponses(responses ...map[int]swagger.ContentValue) map[int]swagger.ContentValue {
 	combined := make(map[int]swagger.ContentValue)
-	for _, r := range responses {
-		for code, resp := range r {
-			combined[code] = resp
+
+	// Process responses in order, preserving the first success response encountered
+	for _, responseMap := range responses {
+		for code, resp := range responseMap {
+			// If it's a success response (2xx) and we don't have one for this code yet, add it.
+			if code >= 200 && code < 300 {
+				if _, exists := combined[code]; !exists {
+					combined[code] = resp
+				}
+			} else {
+				// If it's an error response or a non-2xx success code, always add/override.
+				combined[code] = resp
+			}
 		}
 	}
+
 	return combined
+}
+
+// DefineSwaggerErrorResponses combines multiple error responses for Swagger docs.
+// Preserves existing success responses (2xx) when merging.
+func DefineSwaggerErrorResponses(responses ...map[int]swagger.ContentValue) map[int]swagger.ContentValue {
+	return MergeResponses(responses...)
 }
 
 // DefaultCoreErrorResponses returns a map containing core HTTP error responses shared by all routes (400, 404, 500).
@@ -487,6 +522,22 @@ func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 }
 
 // opIsMultiValue checks if an operator expects multiple values
+// convertErrorResponses converts a map of error responses from map[int]any to map[int]swagger.ContentValue
+func convertErrorResponses(errResp map[int]any) map[int]swagger.ContentValue {
+	converted := make(map[int]swagger.ContentValue)
+	for code, body := range errResp {
+		converted[code] = swagger.ContentValue{
+			Description: http.StatusText(code),
+			Content: swagger.Content{
+				"application/json": {
+					Value: body,
+				},
+			},
+		}
+	}
+	return converted
+}
+
 func opIsMultiValue(op filter.Operator) bool {
 	return op == filter.OpIn || op == filter.OpNin ||
 		op == filter.OpIna || op == filter.OpNina ||
@@ -550,16 +601,32 @@ func WithListEndpoint(
 }
 
 // WithErrorResponses creates a SwaggerOption that merges custom error responses with
-// default responses based on access level (same behavior as WithCustomErrorResponses)
-func WithErrorResponses(errors map[int]swagger.ContentValue) SwaggerOption {
+// default responses based on access level while preserving existing success responses.
+// The merging follows these rules:
+// 1. Existing success responses (2xx) are preserved
+// 2. Default error responses are added if not already present
+// 3. Custom error responses override defaults
+func WithErrorResponses(customErrors map[int]swagger.ContentValue) SwaggerOption {
 	return func(d *swagger.Definitions, accessRole string) {
-		var defaultResponses map[int]swagger.ContentValue
+		// Get default error responses based on access level
+		var defaultErrors map[int]swagger.ContentValue
 		if accessRole == ACCESS_USER_ROLE || accessRole == ACCESS_ADMIN_ROLE {
-			defaultResponses = DefaultAuthErrorResponses()
+			defaultErrors = DefaultAuthErrorResponses()
 		} else {
-			defaultResponses = DefaultPublicErrorResponses()
+			defaultErrors = DefaultPublicErrorResponses()
 		}
 
-		d.Responses = DefineSwaggerErrorResponses(defaultResponses, errors)
+		// Initialize responses if nil
+		if d.Responses == nil {
+			d.Responses = make(map[int]swagger.ContentValue)
+		}
+
+		// Merge in order: defaults -> custom errors.
+		// Existing success responses in d.Responses are preserved by MergeResponses.
+		d.Responses = MergeResponses(
+			d.Responses, // Start with existing responses (preserves existing success)
+			defaultErrors,
+			customErrors,
+		)
 	}
 }

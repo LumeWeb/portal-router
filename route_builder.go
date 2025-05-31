@@ -39,13 +39,12 @@ func DefineOptions(opts ...RouteOption) []RouteOption {
 	return opts
 }
 
-// Core route builder
-// applyRouteOpts applies RouteOptions to a RouteDefinition
+// applyRouteOpts applies RouteOptions to a RouteDefinition and ensures proper initialization
 func applyRouteOpts(d RouteDefinition, opts ...RouteOption) RouteDefinition {
 	// Make shallow copy
 	result := d
 
-	// Ensure maps are initialized if nil
+	// Initialize maps if nil
 	if result.Swagger.Responses == nil {
 		result.Swagger.Responses = make(map[int]swagger.ContentValue)
 	}
@@ -69,6 +68,14 @@ func applyRouteOpts(d RouteDefinition, opts ...RouteOption) RouteDefinition {
 		}
 	}
 
+	// Ensure we have at least the default success response, preserving existing ones
+	result.Swagger.Responses = MergeResponses(
+		result.Swagger.Responses,
+		map[int]swagger.ContentValue{
+			http.StatusOK: defaultSuccessResponse(),
+		},
+	)
+
 	return result
 }
 
@@ -82,29 +89,14 @@ func NewRoute(method, path string, handler echo.HandlerFunc, opts ...RouteOption
 		// Defaults
 		Access: ACCESS_USER_ROLE,
 		Swagger: swagger.Definitions{
-			Responses: map[int]swagger.ContentValue{
-				http.StatusOK: defaultSuccessResponse(),
-				http.StatusBadRequest: swagger.ContentValue{
-					Description: "Bad Request",
-					Content: swagger.Content{
-						"application/json": swagger.Schema{
-							Value: map[string]string{
-								"error": "Bad Request",
-							},
-						},
-					},
+			Responses: DefineSwaggerErrorResponses(
+				map[int]swagger.ContentValue{
+					http.StatusOK: defaultSuccessResponse(),
+					http.StatusBadRequest: badRequestResponse(),
+					http.StatusInternalServerError: internalServerErrorResponse(),
 				},
-				http.StatusInternalServerError: swagger.ContentValue{
-					Description: "Internal Server Error",
-					Content: swagger.Content{
-						"application/json": swagger.Schema{
-							Value: map[string]string{
-								"error": "Internal Server Error",
-							},
-						},
-					},
-				},
-			},
+				DefaultCoreErrorResponses(),
+			),
 		},
 	}
 

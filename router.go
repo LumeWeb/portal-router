@@ -285,8 +285,11 @@ type RouteDefinition struct {
 }
 
 // RegisterRoutes registers a slice of RouteDefinitions with the provided Router.
-// It registers routes with both the router and swagger documentation.
-// It also registers access control for protected routes if an access service is provided.
+// It handles:
+// - Applying common middleware
+// - Initializing route definitions
+// - Registering routes with the router
+// - Setting up access control
 func RegisterRoutes(
 	gRouter Router,
 	accessSvc AccessService,
@@ -306,18 +309,10 @@ func RegisterRoutes(
 	}
 
 	for _, route := range routes {
-		// Ensure route is properly initialized
+		// Apply all route options and ensure proper initialization
 		finalRoute := applyRouteOpts(route)
 
-		// Register with router and swagger using route-specific middleware
-		// Ensure responses exist in swagger definitions
-		if finalRoute.Swagger.Responses == nil {
-			finalRoute.Swagger.Responses = make(map[int]swagger.ContentValue)
-		}
-		if len(finalRoute.Swagger.Responses) == 0 {
-			finalRoute.Swagger.Responses = DefaultPublicErrorResponses()
-		}
-
+		// Register route with router
 		_, err := group.AddRoute(
 			finalRoute.Method,
 			finalRoute.Path,
@@ -329,10 +324,10 @@ func RegisterRoutes(
 			return fmt.Errorf("failed to register route %s %s: %w", route.Method, route.Path, err)
 		}
 
-		// Register access control
-		if route.Access != "" && accessSvc != nil {
-			if err := accessSvc.RegisterRoute(subdomain, route.Path, route.Method, route.Access); err != nil {
-				return fmt.Errorf("failed to register access for route %s: %w", route.Path, err)
+		// Register access control if needed
+		if finalRoute.Access != "" && accessSvc != nil {
+			if err := accessSvc.RegisterRoute(subdomain, finalRoute.Path, finalRoute.Method, finalRoute.Access); err != nil {
+				return fmt.Errorf("failed to register access for route %s: %w", finalRoute.Path, err)
 			}
 		}
 	}
@@ -391,13 +386,16 @@ func AuthSwagger(
 		Content:     swagger.Content{"application/json": {Value: map[string]string{"error": "Forbidden"}}},
 	}
 
-	// Merge with error responses
-	for code, body := range errResp {
-		def.Responses[code] = swagger.ContentValue{
-			Description: http.StatusText(code),
-			Content:     swagger.Content{"application/json": {Value: body}},
-		}
-	}
+	convertedErrors := convertErrorResponses(errResp)
+
+	// Merge with error responses while preserving defaults
+	def.Responses = MergeResponses(
+		def.Responses,
+		convertedErrors,
+		map[int]swagger.ContentValue{
+			http.StatusOK: defaultSuccessResponse(),
+		},
+	)
 
 	return def
 }
@@ -421,13 +419,27 @@ func BasicSwagger(
 	def.Description = description
 	def.Tags = []string{"Public"}
 
-	// Merge error responses
+	// Convert map[int]any to map[int]swagger.ContentValue
+	convertedErrors := make(map[int]swagger.ContentValue)
 	for code, body := range errResp {
-		def.Responses[code] = swagger.ContentValue{
+		convertedErrors[code] = swagger.ContentValue{
 			Description: http.StatusText(code),
-			Content:     swagger.Content{"application/json": {Value: body}},
+			Content: swagger.Content{
+				"application/json": {
+					Value: body,
+				},
+			},
 		}
 	}
+
+	// Merge with error responses while preserving defaults
+	def.Responses = MergeResponses(
+		def.Responses,
+		convertedErrors,
+		map[int]swagger.ContentValue{
+			http.StatusOK: defaultSuccessResponse(),
+		},
+	)
 
 	return applySwaggerOpts(def, "", opts)
 }
