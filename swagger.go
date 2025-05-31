@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+const (
+	MediaTypeJSON = "application/json"
+)
+
 // SwaggerOption defines a function type for modifying swagger.Definitions.
 // Used to apply customizations to OpenAPI/Swagger documentation.
 type SwaggerOption func(*swagger.Definitions, string)
@@ -42,7 +46,7 @@ func WithRequestBody(value interface{}, description string, required bool) Swagg
 			Description: description,
 			Required:    required,
 			Content: map[string]swagger.Schema{
-				"application/json": {
+				MediaTypeJSON: {
 					Value: value,
 				},
 			},
@@ -76,7 +80,7 @@ func WithArrayResponse(status int, description string, itemValue interface{}) Sw
 		d.Responses[status] = swagger.ContentValue{
 			Description: description,
 			Content: map[string]swagger.Schema{
-				"application/json": {
+				MediaTypeJSON: {
 					Value: struct {
 						Items []interface{} `json:"items"`
 					}{
@@ -234,11 +238,41 @@ type Header struct {
 // ResponseOption defines a function type for modifying Response properties
 type ResponseOption func(*Response)
 
-// ResponseError is a placeholder struct to define the schema for error responses.
-// This struct is used by the Swagger documentation generation.
-type ResponseError struct {
-	Error string `json:"error"`
+// ResponseError defines the interface for rich error responses that can
+// provide HTTP status codes and custom serialization.
+type ResponseError interface {
+	error
+	HttpStatus() int
 }
+
+// ErrorResponse is the default error response format for simple errors
+type ErrorResponse struct {
+	Message string `json:"error"`
+}
+
+func (e ErrorResponse) Error() string {
+	return e.Message
+}
+
+func (e ErrorResponse) HttpStatus() int {
+	// Default to 500 if not set
+	return http.StatusInternalServerError
+}
+
+// ErrorResponder extends ResponseError with header support
+type ErrorResponder interface {
+	ResponseError
+	Headers() map[string]string
+}
+
+// ErrorWrapper is a helper to implement ResponseError for simple errors
+type ErrorWrapper struct {
+	Message string
+	Status  int
+}
+
+func (e *ErrorWrapper) Error() string   { return e.Message }
+func (e *ErrorWrapper) HttpStatus() int { return e.Status }
 
 // WithContent creates a ResponseOption that sets the response content
 func WithContent(mediaType string, schema interface{}) ResponseOption {
@@ -262,7 +296,7 @@ func WithHeader(name, description string) ResponseOption {
 
 // WithJSONContent helper for common JSON responses
 func WithJSONContent(schema interface{}) ResponseOption {
-	return WithContent("application/json", schema)
+	return WithContent(MediaTypeJSON, schema)
 }
 
 // WithTotalCountHeader adds the X-Total-Count header to a response
@@ -316,11 +350,11 @@ func WithSuccessResponse(status int, description string, opts ...ResponseOption)
 			d.Responses = make(map[int]swagger.ContentValue)
 		}
 
-		// Create the new success response
-		newResponse := DefineResponse(status, description, opts...)
-		
-		// Merge with existing responses, allowing our new response to override existing ones
-		d.Responses = MergeResponses(newResponse, d.Responses)
+		// Use DefineResponse to create the base response
+		response := DefineResponse(status, description, opts...)
+
+		// Merge with existing responses, preserving existing success responses
+		d.Responses = MergeResponses(response, d.Responses)
 	}
 }
 
@@ -335,17 +369,57 @@ func WithPaginatedResponse(itemType interface{}, paginationMeta interface{}) Swa
 }
 
 // DefineSwaggerErrorResponse creates a Swagger-compatible error response definition.
-func DefineSwaggerErrorResponse(status int, errorMsg string) map[int]swagger.ContentValue {
+// Supports:
+// - string messages
+// - error interface
+// - ResponseError implementations
+// - ErrorResponse struct
+func DefineSwaggerErrorResponse(status int, errValue interface{}) map[int]swagger.ContentValue {
+	var errorMsg string
+	var schema interface{}
+
+	switch v := errValue.(type) {
+	case string:
+		errorMsg = v
+		schema = ErrorResponse{Message: v}
+	case ResponseError:
+		errorMsg = v.Error()
+		schema = v
+	case ErrorResponse:
+		errorMsg = v.Message
+		schema = v
+	default:
+		// Handle any other type including error interface
+		if err, ok := errValue.(error); ok {
+			errorMsg = err.Error()
+			schema = ErrorResponse{Message: errorMsg}
+		} else {
+			errorMsg = fmt.Sprintf("%v", errValue)
+			schema = ErrorResponse{Message: errorMsg}
+		}
+	}
+
 	return map[int]swagger.ContentValue{
 		status: {
 			Description: errorMsg,
 			Content: swagger.Content{
-				"application/json": {
-					Value: ResponseError{Error: errorMsg},
+				MediaTypeJSON: {
+					Value: schema,
 				},
 			},
 		},
 	}
+}
+
+// AsErrorResponse converts an error to a response object
+func AsErrorResponse(err error) interface{} {
+	if err == nil {
+		return ErrorResponse{Message: ""}
+	}
+	if respErr, ok := err.(ResponseError); ok {
+		return respErr
+	}
+	return ErrorResponse{Message: err.Error()}
 }
 
 // MergeResponses combines multiple response maps while preserving success responses (2xx).
@@ -529,7 +603,7 @@ func convertErrorResponses(errResp map[int]any) map[int]swagger.ContentValue {
 		converted[code] = swagger.ContentValue{
 			Description: http.StatusText(code),
 			Content: swagger.Content{
-				"application/json": {
+				MediaTypeJSON: {
 					Value: body,
 				},
 			},
