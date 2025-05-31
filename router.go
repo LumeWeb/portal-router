@@ -386,18 +386,9 @@ func AuthSwagger(
 	}
 
 	// Add standard responses
-	def.Responses[http.StatusOK] = swagger.ContentValue{
-		Description: "Success",
-		Content:     nil, // Response body will be defined by the route
-	}
-	def.Responses[http.StatusUnauthorized] = swagger.ContentValue{
-		Description: "Unauthorized",
-		Content:     swagger.Content{"application/json": {Value: map[string]string{"error": "Unauthorized"}}},
-	}
-	def.Responses[http.StatusForbidden] = swagger.ContentValue{
-		Description: "Forbidden",
-		Content:     swagger.Content{"application/json": {Value: map[string]string{"error": "Forbidden"}}},
-	}
+	def.Responses[http.StatusOK] = defaultSuccessResponse()
+	def.Responses[http.StatusUnauthorized] = unauthorizedResponse()
+	def.Responses[http.StatusForbidden] = forbiddenResponse()
 
 	convertedErrors := convertErrorResponses(errResp)
 
@@ -438,7 +429,7 @@ func BasicSwagger(
 		convertedErrors[code] = swagger.ContentValue{
 			Description: http.StatusText(code),
 			Content: swagger.Content{
-				"application/json": {
+				MediaTypeJSON: {
 					Value: body,
 				},
 			},
@@ -501,7 +492,7 @@ func PaginatedResponseSwagger(summary, description string, purpose jwt.Purpose, 
 	// Update the 200 OK response content with the paginated schema
 	definitions.Responses[http.StatusOK] = swagger.ContentValue{
 		Description: "Success",
-		Content:     swagger.Content{"application/json": {Value: paginatedResponseSchema}},
+		Content:     swagger.Content{MediaTypeJSON: {Value: paginatedResponseSchema}},
 	}
 
 	return definitions
@@ -907,7 +898,7 @@ func TusPostSwagger(summary, description string, errResp map[int]any) swagger.De
 		// Assuming errResp values are schema examples, wrap them in ContentValue
 		definitions.Responses[status] = swagger.ContentValue{
 			Description: http.StatusText(status),
-			Content:     swagger.Content{"application/json": {Value: v}},
+			Content:     swagger.Content{MediaTypeJSON: {Value: v}},
 		}
 	}
 
@@ -976,7 +967,7 @@ func TusHeadSwagger(summary, description string, errResp map[int]any) swagger.De
 		// Assuming errResp values are schema examples, wrap them in ContentValue
 		definitions.Responses[status] = swagger.ContentValue{
 			Description: http.StatusText(status),
-			Content:     swagger.Content{"application/json": {Value: v}},
+			Content:     swagger.Content{MediaTypeJSON: {Value: v}},
 		}
 	}
 
@@ -1097,7 +1088,7 @@ func TusPatchSwagger(summary, description string, errResp map[int]any) swagger.D
 		// Assuming errResp values are schema examples, wrap them in ContentValue
 		definitions.Responses[status] = swagger.ContentValue{
 			Description: http.StatusText(status),
-			Content:     swagger.Content{"application/json": {Value: v}},
+			Content:     swagger.Content{MediaTypeJSON: {Value: v}},
 		}
 	}
 
@@ -1145,7 +1136,7 @@ func TusDeleteSwagger(summary, description string, errResp map[int]any) swagger.
 		// Assuming errResp values are schema examples, wrap them in ContentValue
 		definitions.Responses[status] = swagger.ContentValue{
 			Description: http.StatusText(status),
-			Content:     swagger.Content{"application/json": {Value: v}},
+			Content:     swagger.Content{MediaTypeJSON: {Value: v}},
 		}
 	}
 
@@ -1188,7 +1179,7 @@ func TusOptionsSwagger(summary, description string, errResp map[int]any) swagger
 		// Assuming errResp values are schema examples, wrap them in ContentValue
 		definitions.Responses[status] = swagger.ContentValue{
 			Description: http.StatusText(status),
-			Content:     swagger.Content{"application/json": {Value: v}},
+			Content:     swagger.Content{MediaTypeJSON: {Value: v}},
 		}
 	}
 

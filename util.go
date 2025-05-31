@@ -33,10 +33,8 @@ func defaultSuccessResponse() swagger.ContentValue {
 	return swagger.ContentValue{
 		Description: "Success",
 		Content: swagger.Content{
-			"application/json": {
-				Value: map[string]string{
-					"status": "success",
-				},
+			MediaTypeJSON: {
+				Value: ErrorResponse{Message: ""}, // Empty message indicates success
 			},
 		},
 	}
@@ -47,10 +45,8 @@ func badRequestResponse() swagger.ContentValue {
 	return swagger.ContentValue{
 		Description: "Bad Request",
 		Content: swagger.Content{
-			"application/json": {
-				Value: map[string]string{
-					"error": "Bad Request",
-				},
+			MediaTypeJSON: {
+				Value: ErrorResponse{Message: "Bad Request"},
 			},
 		},
 	}
@@ -61,10 +57,8 @@ func unauthorizedResponse() swagger.ContentValue {
 	return swagger.ContentValue{
 		Description: "Unauthorized",
 		Content: swagger.Content{
-			"application/json": {
-				Value: map[string]string{
-					"error": "Unauthorized",
-				},
+			MediaTypeJSON: {
+				Value: ErrorResponse{Message: "Unauthorized"},
 			},
 		},
 	}
@@ -75,10 +69,8 @@ func forbiddenResponse() swagger.ContentValue {
 	return swagger.ContentValue{
 		Description: "Forbidden",
 		Content: swagger.Content{
-			"application/json": {
-				Value: map[string]string{
-					"error": "Forbidden",
-				},
+			MediaTypeJSON: {
+				Value: ErrorResponse{Message: "Forbidden"},
 			},
 		},
 	}
@@ -89,10 +81,8 @@ func notFoundResponse() swagger.ContentValue {
 	return swagger.ContentValue{
 		Description: "Not Found",
 		Content: swagger.Content{
-			"application/json": {
-				Value: map[string]string{
-					"error": "Not Found",
-				},
+			MediaTypeJSON: {
+				Value: ErrorResponse{Message: "Not Found"},
 			},
 		},
 	}
@@ -103,11 +93,8 @@ func validationFailedResponse() swagger.ContentValue {
 	return swagger.ContentValue{
 		Description: "Validation Failed",
 		Content: swagger.Content{
-			"application/json": {
-				Value: map[string]any{
-					"error":  "validation failed",
-					"fields": map[string]string{},
-				},
+			MediaTypeJSON: {
+				Value: ErrorResponse{Message: "Validation Failed"},
 			},
 		},
 	}
@@ -118,10 +105,8 @@ func internalServerErrorResponse() swagger.ContentValue {
 	return swagger.ContentValue{
 		Description: "Internal Server Error",
 		Content: swagger.Content{
-			"application/json": {
-				Value: map[string]string{
-					"error": "Internal Server Error",
-				},
+			MediaTypeJSON: {
+				Value: ErrorResponse{Message: "Internal Server Error"},
 			},
 		},
 	}
