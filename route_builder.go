@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/labstack/echo/v4"
 	swagger "go.lumeweb.com/gswagger"
+	"net/http"
 )
 
 // AccessService defines the interface for route access control
@@ -39,6 +40,38 @@ func DefineOptions(opts ...RouteOption) []RouteOption {
 }
 
 // Core route builder
+// applyRouteOpts applies RouteOptions to a RouteDefinition
+func applyRouteOpts(d RouteDefinition, opts ...RouteOption) RouteDefinition {
+	// Make shallow copy
+	result := d
+
+	// Ensure maps are initialized if nil
+	if result.Swagger.Responses == nil {
+		result.Swagger.Responses = make(map[int]swagger.ContentValue)
+	}
+	if result.Swagger.PathParams == nil {
+		result.Swagger.PathParams = make(swagger.ParameterValue)
+	}
+	if result.Swagger.Querystring == nil {
+		result.Swagger.Querystring = make(swagger.ParameterValue)
+	}
+	if result.Swagger.Headers == nil {
+		result.Swagger.Headers = make(swagger.ParameterValue)
+	}
+	if result.Swagger.Cookies == nil {
+		result.Swagger.Cookies = make(swagger.ParameterValue)
+	}
+
+	// Apply route options
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&result)
+		}
+	}
+
+	return result
+}
+
 // NewRoute creates a new RouteDefinition with the given method, path and handler,
 // applying any provided RouteOptions.
 func NewRoute(method, path string, handler echo.HandlerFunc, opts ...RouteOption) RouteDefinition {
@@ -47,15 +80,35 @@ func NewRoute(method, path string, handler echo.HandlerFunc, opts ...RouteOption
 		Path:    path,
 		Handler: handler,
 		// Defaults
-		Access:  ACCESS_USER_ROLE,
-		Swagger: swagger.Definitions{},
+		Access: ACCESS_USER_ROLE,
+		Swagger: swagger.Definitions{
+			Responses: map[int]swagger.ContentValue{
+				http.StatusOK: defaultSuccessResponse(),
+				http.StatusBadRequest: swagger.ContentValue{
+					Description: "Bad Request",
+					Content: swagger.Content{
+						"application/json": swagger.Schema{
+							Value: map[string]string{
+								"error": "Bad Request",
+							},
+						},
+					},
+				},
+				http.StatusInternalServerError: swagger.ContentValue{
+					Description: "Internal Server Error",
+					Content: swagger.Content{
+						"application/json": swagger.Schema{
+							Value: map[string]string{
+								"error": "Internal Server Error",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
-	for _, opt := range opts {
-		opt(&def)
-	}
-
-	return def
+	return applyRouteOpts(def, opts...)
 }
 
 // Option setters

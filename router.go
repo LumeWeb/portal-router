@@ -38,7 +38,6 @@ func GetRouter(r Router) *echo.Echo {
 	return nil
 }
 
-
 // GetGroup returns the underlying *echo.Group instance
 func GetGroup(r Router) *echo.Group {
 	router := r.Router().Router(true)
@@ -261,7 +260,7 @@ func ListEndpointSwagger(
 
 	// Apply all options including the response option
 	allOpts := append([]SwaggerOption{responseOpt}, opts...)
-	def = applyOpts(def, "", allOpts)
+	def = applySwaggerOpts(def, "", allOpts)
 
 	return def
 }
@@ -307,13 +306,24 @@ func RegisterRoutes(
 	}
 
 	for _, route := range routes {
+		// Ensure route is properly initialized
+		finalRoute := applyRouteOpts(route)
+
 		// Register with router and swagger using route-specific middleware
+		// Ensure responses exist in swagger definitions
+		if finalRoute.Swagger.Responses == nil {
+			finalRoute.Swagger.Responses = make(map[int]swagger.ContentValue)
+		}
+		if len(finalRoute.Swagger.Responses) == 0 {
+			finalRoute.Swagger.Responses = DefaultPublicErrorResponses()
+		}
+
 		_, err := group.AddRoute(
-			route.Method,
-			route.Path,
-			route.Handler,
-			route.Swagger,
-			route.Middlewares...,
+			finalRoute.Method,
+			finalRoute.Path,
+			finalRoute.Handler,
+			finalRoute.Swagger,
+			finalRoute.Middlewares...,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to register route %s %s: %w", route.Method, route.Path, err)
@@ -419,7 +429,7 @@ func BasicSwagger(
 		}
 	}
 
-	return applyOpts(def, "", opts)
+	return applySwaggerOpts(def, "", opts)
 }
 
 // PaginatedResponseSwagger generates Swagger definitions for an endpoint

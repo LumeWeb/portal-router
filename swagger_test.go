@@ -1,14 +1,23 @@
 package router
 
 import (
+	"encoding/json"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/queryutil/filter"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+)
+
+const (
+	TypeArray   = openapi3.TypeArray
+	TypeObject  = openapi3.TypeObject
 )
 
 // Define a test schema that implements FieldSchema
@@ -31,6 +40,284 @@ func TestWithSwaggerOptions(t *testing.T) {
 	route := NewRoute("GET", "/test", handler, WithSwaggerOptions(WithSummary("Test Summary")))
 
 	assert.Equal(t, "Test Summary", route.Swagger.Summary)
+}
+
+func TestResponseSchemaGeneration(t *testing.T) {
+	type User struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+
+	tests := []struct {
+		name        string
+		status      int
+		description string
+		content     interface{}
+		wantSchema  map[string]interface{}
+	}{
+		{
+			name:        "simple object response",
+			status:      http.StatusOK,
+			description: "User details",
+			content:     User{},
+			wantSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"id":    map[string]interface{}{"type": "string"},
+					"name":  map[string]interface{}{"type": "string"},
+					"email": map[string]interface{}{"type": "string"},
+				},
+			},
+		},
+		{
+			name:        "array response",
+			status:      http.StatusOK,
+			description: "User list",
+			content:     []User{},
+			wantSchema: map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"id":    map[string]interface{}{"type": "string"},
+						"name":  map[string]interface{}{"type": "string"},
+						"email": map[string]interface{}{"type": "string"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			route := NewRoute("GET", "/test", nil,
+				WithSwagger(
+					WithSuccessResponse(tt.status, tt.description,
+						WithJSONContent(tt.content),
+					),
+				),
+			)
+
+			// Verify the response schema was properly generated
+			resp := route.Swagger.Responses[tt.status]
+			assert.Equal(t, tt.description, resp.Description)
+
+			content := resp.Content["application/json"]
+			assert.NotNil(t, content)
+
+			// Generate the OpenAPI schema
+			router, err := NewRouter(APIInfo().
+				Title("Test API").
+				Version("1.0.0"))
+			require.NoError(t, err)
+
+			_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
+			require.NoError(t, err)
+
+			// Generate and resolve references
+			err = router.GenerateAndExposeOpenapi()
+			require.NoError(t, err)
+
+			// Get the generated OpenAPI spec
+			swaggerSchema := router.GetSwaggerSchema()
+			require.NotNil(t, swaggerSchema)
+
+			// Find our path in the schema
+			pathItem := swaggerSchema.Paths.Find("/test")
+			require.NotNil(t, pathItem)
+
+			operation := pathItem.GetOperation("GET")
+			require.NotNil(t, operation)
+
+			responseRef, exists := operation.Responses.Map()[strconv.Itoa(tt.status)]
+			require.True(t, exists, "expected response for status %d", tt.status)
+			require.NotNil(t, responseRef)
+
+			mediaType := responseRef.Value.Content.Get("application/json")
+			require.NotNil(t, mediaType, "expected application/json content for status %d", tt.status)
+
+			// Verify schema properties
+			schema := mediaType.Schema.Value
+			assert.NotNil(t, schema)
+
+			// Compare schema structure
+			if tt.wantSchema["type"] == "object" {
+				assert.True(t, schema.Type.Is(TypeObject))
+				assert.Equal(t, len(tt.wantSchema["properties"].(map[string]interface{})), len(schema.Properties))
+				for propName, propSchema := range tt.wantSchema["properties"].(map[string]interface{}) {
+					assert.Contains(t, schema.Properties, propName)
+					assert.True(t, schema.Properties[propName].Value.Type.Is(propSchema.(map[string]interface{})["type"].(string)))
+				}
+			} else if tt.wantSchema["type"] == "array" {
+				assert.True(t, schema.Type.Is(TypeArray))
+				items := schema.Items.Value
+				assert.NotNil(t, items)
+				assert.Equal(t, len(tt.wantSchema["items"].(map[string]interface{})["properties"].(map[string]interface{})), len(items.Properties))
+			}
+		})
+	}
+}
+
+func TestAPIKeyAuthEndpoint(t *testing.T) {
+	type Response struct {
+		Data string `json:"data"`
+	}
+
+	handler := func(c echo.Context) error {
+		return c.JSON(http.StatusOK, Response{Data: "test data"})
+	}
+
+	route := NewRoute("GET", "/secure/data", handler,
+		WithSwagger(
+			WithSummary("Get secure data"),
+			WithDescription("Requires API key authentication"),
+			WithHeaderParam("X-API-Key", "API key for authentication", "string"),
+			WithSuccessResponse(http.StatusOK, "Secure data retrieved",
+				WithJSONContent(Response{}),
+			),
+		),
+	)
+
+	// Test Swagger config
+	assert.Contains(t, route.Swagger.Headers, "X-API-Key")
+	assert.Equal(t, "string", route.Swagger.Headers["X-API-Key"].Schema.Value)
+
+	// Test actual response decoding
+	router, err := NewRouter(APIInfo().
+		Title("Test API").
+		Version("1.0.0"))
+	require.NoError(t, err)
+
+	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/secure/data", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// Decode and verify response
+	var resp Response
+	err = json.NewDecoder(rr.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "test data", resp.Data)
+}
+
+func TestComplexRequestBodyEndpoint(t *testing.T) {
+	type OrderRequest struct {
+		Items    []string `json:"items"`
+		Priority int      `json:"priority"`
+		Notes    string   `json:"notes,omitempty"`
+	}
+
+	type OrderResponse struct {
+		OrderID string `json:"order_id"`
+	}
+
+	handler := func(c echo.Context) error {
+		var req OrderRequest
+		if err := c.Bind(&req); err != nil {
+			return err
+		}
+		return c.JSON(http.StatusCreated, OrderResponse{OrderID: "123"})
+	}
+
+	route := NewRoute("POST", "/orders", handler,
+		WithSwagger(
+			WithSummary("Create new order"),
+			WithRequestBody(OrderRequest{}, "Order details", true),
+			WithSuccessResponse(http.StatusCreated, "Order created",
+				WithJSONContent(OrderResponse{}),
+			),
+		),
+	)
+
+	// Test Swagger config
+	assert.True(t, route.Swagger.RequestBody.Required)
+	assert.Contains(t, route.Swagger.RequestBody.Content, "application/json")
+
+	// Test actual request/response flow
+	router, err := NewRouter(APIInfo().
+		Title("Test API").
+		Version("1.0.0"))
+	require.NoError(t, err)
+
+	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
+	require.NoError(t, err)
+
+	reqBody := `{"items":["item1","item2"],"priority":1}`
+	req := httptest.NewRequest("POST", "/orders", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+
+	// Decode and verify response
+	var resp OrderResponse
+	err = json.NewDecoder(rr.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "123", resp.OrderID)
+}
+
+func TestDeprecatedEndpoint(t *testing.T) {
+	type Response struct {
+		Message string `json:"message"`
+	}
+
+	handler := func(c echo.Context) error {
+		c.Response().Header().Set("Deprecation", "true")
+		c.Response().Header().Set("Sunset", "2025-12-31")
+		return c.JSON(http.StatusOK, Response{Message: "Deprecated"})
+	}
+
+	route := NewRoute("GET", "/old-endpoint", handler,
+		WithSwagger(
+			WithSummary("Deprecated endpoint"),
+			WithDescription("This endpoint is deprecated and will be removed"),
+			WithResponseHeaders(http.StatusOK, "Success but deprecated",
+				map[string]swagger.Schema{
+					"application/json": {
+						Value: Response{},
+					},
+				},
+				map[string]string{
+					"Deprecation": "true",
+					"Sunset":      "2025-12-31",
+				},
+			),
+		),
+	)
+
+	// Test Swagger config
+	resp := route.Swagger.Responses[http.StatusOK]
+	assert.Contains(t, resp.Headers, "Deprecation")
+	assert.Contains(t, resp.Headers, "Sunset")
+
+	// Test actual response
+	router, err := NewRouter(APIInfo().
+		Title("Test API").
+		Version("1.0.0"))
+	require.NoError(t, err)
+
+	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/old-endpoint", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "true", rr.Header().Get("Deprecation"))
+	assert.Equal(t, "2025-12-31", rr.Header().Get("Sunset"))
+
+	// Decode and verify response
+	var respBody Response
+	err = json.NewDecoder(rr.Body).Decode(&respBody)
+	require.NoError(t, err)
+	assert.Equal(t, "Deprecated", respBody.Message)
 }
 
 func TestWithFilterParamsFromSchema(t *testing.T) {

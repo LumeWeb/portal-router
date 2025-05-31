@@ -127,23 +127,16 @@ func WithDescription(description string) SwaggerOption {
 // for a route. Automatically includes appropriate error responses based on access level.
 func WithSwagger(opts ...SwaggerOption) RouteOption {
 	return func(d *RouteDefinition) {
+		// Start with default error responses based on access level
 		def := swagger.Definitions{}
-
-		// Apply options with access context
-		for _, opt := range opts {
-			opt(&def, d.Access) // Pass access level
+		if d.Access == ACCESS_USER_ROLE || d.Access == ACCESS_ADMIN_ROLE {
+			def.Responses = DefaultAuthErrorResponses()
+		} else {
+			def.Responses = DefaultPublicErrorResponses()
 		}
 
-		// Set defaults if no responses configured
-		if def.Responses == nil {
-			if d.Access == ACCESS_USER_ROLE || d.Access == ACCESS_ADMIN_ROLE {
-				def.Responses = DefaultAuthErrorResponses()
-			} else {
-				def.Responses = DefaultPublicErrorResponses()
-			}
-		}
-
-		d.Swagger = def
+		// Apply user-provided options
+		d.Swagger = applySwaggerOpts(def, d.Access, opts)
 	}
 }
 
@@ -330,7 +323,7 @@ func DefineSwaggerErrorResponse(status int, errorMsg string) map[int]swagger.Con
 	return map[int]swagger.ContentValue{
 		status: {
 			Description: errorMsg,
-			Content: map[string]swagger.Schema{ // Corrected: Map value type is swagger.Schema
+			Content: swagger.Content{
 				"application/json": {
 					Value: ResponseError{Error: errorMsg},
 				},

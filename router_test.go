@@ -30,6 +30,9 @@ func TestRegisterRoutes(t *testing.T) {
 					Path:    "/test",
 					Method:  "GET",
 					Handler: func(c echo.Context) error { return nil },
+					Swagger: swagger.Definitions{
+						Responses: DefaultPublicErrorResponses(),
+					},
 				},
 			},
 			wantRegisterErr:   false,
