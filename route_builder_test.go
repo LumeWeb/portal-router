@@ -224,19 +224,16 @@ func TestNewRouter(t *testing.T) {
 			Version("1.0.0")
 
 		// Test with router configuration option
-		router, err := NewRouter(info, 
+		router, err := NewRouter(info,
 			WithRouterBasePath("/v1"),
 			WithRouterJSONDocsPath("/api/docs.json"),
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, router)
-		
-		// Verify options were applied
+
 		echoRouter := GetRouter(router)
 		require.NotNil(t, echoRouter, "router should not be nil")
-		
-		// Verify it's not nil and routes requests
-		
+
 		req := httptest.NewRequest("GET", "/v1/test", nil)
 		rr := httptest.NewRecorder()
 		echoRouter.ServeHTTP(rr, req)
@@ -247,5 +244,19 @@ func TestNewRouter(t *testing.T) {
 		// Empty API info should fail validation
 		_, err := NewRouter(APIInfo())
 		assert.Error(t, err)
+	})
+
+	t.Run("router with servers", func(t *testing.T) {
+		info := APIInfo().
+			Title("Test API").
+			Version("1.0.0")
+
+		router, err := NewRouter(info,
+			WithServer("https://api.example.com", "Production API"),
+			WithServer("https://staging-api.example.com", "Staging API"),
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, router)
+		assert.Len(t, router.GetSwaggerSchema().Servers, 3) // Includes default /api server
 	})
 }
