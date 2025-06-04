@@ -6,9 +6,10 @@ toolchain go1.24.1
 
 require (
 	github.com/getkin/kin-openapi v0.132.0
+	github.com/invopop/jsonschema v0.13.0
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/stretchr/testify v1.10.0
-	go.lumeweb.com/gswagger v0.20.5
+	go.lumeweb.com/gswagger v0.20.6
 	go.lumeweb.com/portal v0.4.2-0.20250504192002-4547d95e5a02
 	go.lumeweb.com/portal-middleware v0.2.5
 	go.lumeweb.com/queryutil v0.3.2
@@ -54,7 +55,6 @@ require (
 	github.com/gorilla/mux v1.8.2-0.20240619235004-db9d1d0073d2 // indirect
 	github.com/gotd/contrib v0.21.0 // indirect
 	github.com/hbollon/go-edlib v1.6.0 // indirect
-	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
