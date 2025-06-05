@@ -311,15 +311,7 @@ func RegisterRoutes(
 	commonMiddleware ...echo.MiddlewareFunc,
 ) error {
 	// Create a group with common middleware if any exist
-	var group Router = gRouter
-	if len(commonMiddleware) > 0 {
-		var err error
-		group, err = gRouter.Group("")
-		if err != nil {
-			return fmt.Errorf("failed to create route group: %w", err)
-		}
-		group.Use(commonMiddleware...)
-	}
+	var group = gRouter
 
 	for _, route := range routes {
 		// Apply all route options and ensure proper initialization
@@ -331,7 +323,7 @@ func RegisterRoutes(
 			finalRoute.Path,
 			finalRoute.Handler,
 			finalRoute.Swagger,
-			finalRoute.Middlewares...,
+			append(append([]echo.MiddlewareFunc{}, commonMiddleware...), finalRoute.Middlewares...)...,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to register route %s %s: %w", route.Method, route.Path, err)
