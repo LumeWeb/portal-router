@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/labstack/echo/v4"
 	swagger "go.lumeweb.com/gswagger"
+	"go.lumeweb.com/portal-middleware/cors"
 	"net/http"
 )
 
@@ -68,6 +69,12 @@ func applyRouteOpts(d RouteDefinition, opts ...RouteOption) RouteDefinition {
 		}
 	}
 
+	// Prepend CORS middleware if configured
+	if result.CorsConfig != nil {
+		corsHandler := cors.NewWithDefaults(*result.CorsConfig)
+		result.Middlewares = append([]echo.MiddlewareFunc{echo.WrapMiddleware(corsHandler)}, result.Middlewares...)
+	}
+
 	// Ensure we have at least the default success response, preserving existing ones
 	result.Swagger.Responses = MergeResponses(
 		result.Swagger.Responses,
@@ -91,13 +98,14 @@ func NewRoute(method, path string, handler echo.HandlerFunc, opts ...RouteOption
 		Swagger: swagger.Definitions{
 			Responses: DefineSwaggerErrorResponses(
 				map[int]swagger.ContentValue{
-					http.StatusOK: defaultSuccessResponse(),
-					http.StatusBadRequest: badRequestResponse(),
+					http.StatusOK:                  defaultSuccessResponse(),
+					http.StatusBadRequest:          badRequestResponse(),
 					http.StatusInternalServerError: internalServerErrorResponse(),
 				},
 				DefaultCoreErrorResponses(),
 			),
 		},
+		CorsConfig: nil,
 	}
 
 	return applyRouteOpts(def, opts...)
@@ -116,6 +124,19 @@ func WithAccess(accessRole string) RouteOption {
 func WithMiddlewares(middleware ...echo.MiddlewareFunc) RouteOption {
 	return func(d *RouteDefinition) {
 		d.Middlewares = append(d.Middlewares, middleware...)
+	}
+}
+
+// WithCors creates a RouteOption that sets CORS configuration for the route.
+// The CORS middleware will be prepended to the middleware chain.
+// If no configs are provided, an empty config will be used which will apply defaults.
+func WithCors(configs ...cors.Config) RouteOption {
+	return func(d *RouteDefinition) {
+		if len(configs) > 0 {
+			d.CorsConfig = &configs[0]
+		} else {
+			d.CorsConfig = &cors.Config{}
+		}
 	}
 }
 
