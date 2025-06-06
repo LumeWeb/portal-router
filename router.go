@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/invopop/jsonschema"
 	"go.lumeweb.com/gswagger/apirouter"
+	"go.lumeweb.com/portal-middleware/cors"
 	"net/http"
 	"strings"
 
@@ -295,6 +296,8 @@ type RouteDefinition struct {
 	Swagger swagger.Definitions
 	// Middlewares contains route-specific middleware chain
 	Middlewares []echo.MiddlewareFunc
+	// CorsConfig stores the CORS middleware configuration for the route
+	CorsConfig *cors.Config
 }
 
 // RegisterRoutes registers a slice of RouteDefinitions with the provided Router.
@@ -308,14 +311,14 @@ func RegisterRoutes(
 	accessSvc AccessService,
 	subdomain string,
 	routes []RouteDefinition,
-	commonMiddleware ...echo.MiddlewareFunc,
+	commonOpts ...RouteOption,
 ) error {
 	// Create a group with common middleware if any exist
 	var group = gRouter
 
 	for _, route := range routes {
-		// Apply all route options and ensure proper initialization
-		finalRoute := applyRouteOpts(route)
+		// Apply all route options including common ones
+		finalRoute := applyRouteOpts(route, commonOpts...)
 
 		// Register route with router
 		_, err := group.AddRoute(
@@ -323,7 +326,7 @@ func RegisterRoutes(
 			finalRoute.Path,
 			finalRoute.Handler,
 			finalRoute.Swagger,
-			append(append([]echo.MiddlewareFunc{}, commonMiddleware...), finalRoute.Middlewares...)...,
+			finalRoute.Middlewares...,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to register route %s %s: %w", route.Method, route.Path, err)
