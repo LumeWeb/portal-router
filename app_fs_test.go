@@ -9,6 +9,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"golang.org/x/net/html"
 )
 
 func TestNewAppFilesystem(t *testing.T) {
@@ -108,6 +110,71 @@ func TestAppFilesystem_Open_Index(t *testing.T) {
 	if !strings.Contains(contentStr, "<script type=\"text/javascript\">window.VITE_PORTAL_DOMAIN") {
 		t.Errorf("Modified index.html does not contain script tag: %s", contentStr)
 	}
+
+	// Parse HTML to verify script position
+	doc, err := html.Parse(strings.NewReader(contentStr))
+	if err != nil {
+		t.Fatalf("Failed to parse modified HTML: %v", err)
+	}
+
+	head := findHeadElement(doc)
+	if head == nil {
+		t.Fatal("No head element found in modified HTML")
+	}
+
+	// Verify script is first child
+	if head.FirstChild == nil || head.FirstChild.Data != "script" {
+		t.Error("Script tag is not first child of head")
+	}
+}
+
+func TestAppFilesystem_Open_Index_EmptyHead(t *testing.T) {
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body><h1>Hello</h1></body></html>`,
+	})
+
+	portalDomain := "example.com"
+	appFS := NewAppFilesystem(fsys, portalDomain)
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "<script") {
+		t.Errorf("Modified index.html does not contain script tag: %s", contentStr)
+	}
+
+	// Parse HTML to verify script position
+	doc, err := html.Parse(strings.NewReader(contentStr))
+	if err != nil {
+		t.Fatalf("Failed to parse modified HTML: %v", err)
+	}
+
+	head := findHeadElement(doc)
+	if head == nil {
+		t.Fatal("No head element found in modified HTML")
+	}
+
+	// Verify script is only child
+	if head.FirstChild == nil || head.FirstChild.Data != "script" {
+		t.Error("Script tag is not first child of head")
+	}
+	if head.FirstChild != head.LastChild {
+		t.Error("Head contains more than just the script tag")
+	}
 }
 
 func TestAppFilesystem_Open_Index_Cached(t *testing.T) {
@@ -190,6 +257,22 @@ func TestAppFilesystem_ModifyIndexHTML_NoHead(t *testing.T) {
 }
 
 // NewTestFS creates an in-memory fs.FS for testing.
+func findHeadElement(doc *html.Node) *html.Node {
+	var head *html.Node
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "head" {
+			head = n
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(doc)
+	return head
+}
+
 func NewTestFS(files map[string]string) fs.FS {
 	mapFS := make(fstest.MapFS)
 	for name, content := range files {
