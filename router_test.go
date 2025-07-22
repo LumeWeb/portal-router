@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
-	coreMocks "go.lumeweb.com/portal/core/testing/mocks"
 )
 
 func TestRegisterRoutes(t *testing.T) {
@@ -76,7 +75,7 @@ func TestRegisterRoutes(t *testing.T) {
 				Title("Test API").
 				Version("1.0.0"))
 			require.NoError(t, err)
-			accessSvc := coreMocks.NewMockAccessService(t)
+			accessSvc := NewMockAccessService(t)
 
 			if tt.wantAccessReg || tt.accessSvcErr != nil {
 				// If access registration is expected OR an access service error is expected,

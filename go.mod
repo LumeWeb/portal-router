@@ -13,6 +13,7 @@ require (
 	go.lumeweb.com/portal v0.4.2-0.20250622033937-d2bdfd254870
 	go.lumeweb.com/portal-middleware v0.2.8-0.20250620155544-266a2cbed262
 	go.lumeweb.com/queryutil v0.3.12
+	golang.org/x/net v0.41.0
 )
 
 require (
@@ -112,7 +113,6 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect

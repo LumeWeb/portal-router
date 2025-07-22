@@ -3,6 +3,9 @@ package router
 import (
 	swagger "go.lumeweb.com/gswagger"
 	"net/http"
+	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Shared base for all endpoints
@@ -98,6 +101,42 @@ func validationFailedResponse() swagger.ContentValue {
 			},
 		},
 	}
+}
+
+// IsSubdomain checks if the given domain is a subdomain of its public suffix.
+// Returns true if domain has parts before the public suffix, false otherwise.
+func IsSubdomain(domain string) bool {
+	if domain == "" {
+		return false
+	}
+
+	// Get public suffix (e.g. "co.uk" for "example.co.uk")
+	suffix, icann := publicsuffix.PublicSuffix(domain)
+
+	// Non-ICANN managed domains are never considered subdomains
+	if !icann {
+		return false
+	}
+
+	// If domain equals the public suffix, it's not a subdomain
+	if domain == suffix {
+		return false
+	}
+
+	// Remove the suffix from the domain
+	base := strings.TrimSuffix(domain, "."+suffix)
+
+	// If the base is empty, it's not a subdomain (e.g., "co.uk")
+	if base == "" {
+		return false
+	}
+
+	// If the base contains a dot, it's a subdomain
+	if strings.Contains(base, ".") {
+		return true
+	}
+
+	return false
 }
 
 // internalServerErrorResponse returns the standard 500 Internal Server Error response
