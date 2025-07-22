@@ -139,7 +139,13 @@ func (a *AppFilesystem) modifyIndexHTML(content []byte) []byte {
 		Data: scriptBuf.String(),
 	}
 	script.AppendChild(scriptText)
-	head.AppendChild(script)
+	
+	// Insert as first child of head
+	if head.FirstChild != nil {
+		head.InsertBefore(script, head.FirstChild)
+	} else {
+		head.AppendChild(script)
+	}
 
 	var buf bytes.Buffer
 	if err := html.Render(&buf, doc); err != nil {
