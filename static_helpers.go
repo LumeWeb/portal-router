@@ -14,15 +14,15 @@ import (
 
 const (
 	// StaticAssetsPath is the URL path prefix for static assets
-	StaticAssetsPath = "/assets"
+	StaticAssetsPath = "/static"
 	// StaticAssetsDir is the directory name where static assets are stored
-	StaticAssetsDir = "assets"
+	StaticAssetsDir = "static"
 	// DefaultIndexFile is the default filename to serve for SPA fallback
 	DefaultIndexFile = "index.html"
 )
 
 // httpToFS implements fs.FS by wrapping an http.FileSystem.
-// This allows using http.FileSystem implementations (like http.Dir) 
+// This allows using http.FileSystem implementations (like http.Dir)
 // where fs.FS is required.
 type httpToFS struct {
 	fs http.FileSystem
@@ -178,7 +178,7 @@ type StaticConfig struct {
 // When using FS, IndexFile must be specified for SPA fallback behavior.
 // Directory-based serving will automatically serve the index file for root requests.
 //
-// Static assets are served under StaticAssetsPath ("/assets") by default.
+// Static assets are served under StaticAssetsPath ("/static") by default.
 // All other requests fall back to the index file for SPA behavior.
 //
 // Returns an error if:
