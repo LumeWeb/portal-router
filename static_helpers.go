@@ -6,11 +6,35 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 )
+
+// cacheControlWriter wraps http.ResponseWriter to only set Cache-Control
+// header when a 200 OK response is written
+type cacheControlWriter struct {
+	http.ResponseWriter
+	cacheControl string
+	headerWritten bool
+}
+
+func (w *cacheControlWriter) WriteHeader(code int) {
+	if code == http.StatusOK {
+		w.Header().Set("Cache-Control", w.cacheControl)
+	}
+	w.ResponseWriter.WriteHeader(code)
+	w.headerWritten = true
+}
+
+func (w *cacheControlWriter) Write(b []byte) (int, error) {
+	if !w.headerWritten {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
 
 const (
 	// StaticAssetsPath is the URL path prefix for static assets
@@ -19,7 +43,11 @@ const (
 	StaticAssetsDir = "static"
 	// DefaultIndexFile is the default filename to serve for SPA fallback
 	DefaultIndexFile = "index.html"
+	// FaviconFiles lists the supported favicon file extensions
+	FaviconFiles = "ico,png,svg,gif"
 )
+
+var faviconExts = strings.Split(FaviconFiles, ",")
 
 // httpToFS implements fs.FS by wrapping an http.FileSystem.
 // This allows using http.FileSystem implementations (like http.Dir)
@@ -214,7 +242,7 @@ func SetupStaticRoutes(r Router, cfg StaticConfig) error {
 		}
 
 		if dirPath != "" {
-			assetsPath := filepath.Join(dirPath, StaticAssetsDir)
+			assetsPath := filepath.Join(dirPath, StaticAssetsDir) // Keep filepath for disk paths
 			fsys = os.DirFS(dirPath)
 			handler = http.FileServer(http.Dir(dirPath))
 			echoRouter.Static(StaticAssetsPath, assetsPath)
@@ -237,10 +265,62 @@ func SetupStaticRoutes(r Router, cfg StaticConfig) error {
 //
 // All requests not under "/api/" will return the specified index file.
 // API routes are excluded to allow proper 404 responses for invalid API calls.
+// Favicon files are served from the root (favicon.*) or StaticAssetsDir if present.
 func setupSPAFallback(echoRouter *echo.Echo, fsys fs.FS, indexFile string) error {
 	if indexFile == "" {
 		indexFile = DefaultIndexFile
 	}
+	
+	// Add favicon route handlers
+	for _, ext := range faviconExts {
+		ext := ext // capture range variable
+		handler := func(c echo.Context, head bool) error {
+			faviconPath := "favicon." + ext
+			file, err := fsys.Open(faviconPath)
+			if err != nil {
+				// Try to serve from static directory
+				file, err = fsys.Open(path.Join(StaticAssetsDir, faviconPath))
+				if err != nil {
+					return echo.ErrNotFound
+				}
+			}
+			defer file.Close()
+
+			// Determine content type from extension
+			var contentType string
+			switch ext {
+			case "png":
+				contentType = "image/png"
+			case "svg":
+				contentType = "image/svg+xml" 
+			case "gif":
+				contentType = "image/gif"
+			default:
+				contentType = "image/x-icon"
+			}
+
+			// Set common headers
+			h := c.Response().Header()
+			h.Set("Content-Type", contentType)
+			h.Set("Cache-Control", "public, max-age=31536000, immutable")
+
+			if head {
+				// For HEAD requests, just return headers without reading file
+				info, err := file.Stat()
+				if err != nil {
+					return err
+				}
+				h.Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+				return c.NoContent(http.StatusOK)
+			}
+			
+			// For GET requests, stream the file content
+			return c.Stream(http.StatusOK, contentType, file)
+		}
+		echoRouter.GET("/favicon."+ext, func(c echo.Context) error { return handler(c, false) })
+		echoRouter.HEAD("/favicon."+ext, func(c echo.Context) error { return handler(c, true) })
+	}
+	
 	echoRouter.GET("/*", func(c echo.Context) error {
 		if strings.HasPrefix(c.Request().URL.Path, "/api/") {
 			return echo.ErrNotFound
@@ -262,7 +342,31 @@ func setupSPAFallback(echoRouter *echo.Echo, fsys fs.FS, indexFile string) error
 //
 // All requests not under "/api/" will be handled by the provided handler.
 // API routes are excluded to allow proper 404 responses for invalid API calls.
+// Favicon files are served from the root if they exist in the filesystem.
 func setupDirectoryFallback(echoRouter *echo.Echo, handler http.Handler) error {
+	// Add favicon route handlers
+	for _, ext := range faviconExts {
+		ext := ext // capture range variable
+		serve := func(c echo.Context) error {
+			// Wrap response writer to only set cache headers on 200 OK
+			origWriter := c.Response().Writer
+			cacheWriter := &cacheControlWriter{
+				ResponseWriter: origWriter,
+				cacheControl:   "public, max-age=31536000, immutable",
+			}
+			c.Response().Writer = cacheWriter
+			defer func() {
+				c.Response().Writer = origWriter
+			}()
+
+			c.Request().URL.Path = "/favicon." + ext
+			handler.ServeHTTP(c.Response(), c.Request())
+			return nil
+		}
+		echoRouter.GET("/favicon."+ext, serve)
+		echoRouter.HEAD("/favicon."+ext, serve)
+	}
+	
 	echoRouter.GET("/*", func(c echo.Context) error {
 		if !strings.HasPrefix(c.Request().URL.Path, "/api/") {
 			c.Request().URL.Path = "/"
