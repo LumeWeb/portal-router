@@ -491,6 +491,176 @@ func TestSetupStaticRoutes(t *testing.T) {
 	})
 }
 
+func TestMPASetupWithAssets(t *testing.T) {
+	mockFS := fstest.MapFS{
+		"custom_assets/style.css": &fstest.MapFile{
+			Data: []byte("body { color: red; }"),
+		},
+		"index.html": &fstest.MapFile{
+			Data: []byte("<html>index</html>"),
+		},
+	}
+
+	r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+	require.NoError(t, err)
+
+	err = MPASetupWithAssets(r, mockFS, "custom_assets")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/custom_assets/style.css", nil)
+	rr := httptest.NewRecorder()
+	GetRouter(r).ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "body { color: red; }", rr.Body.String())
+}
+
+func TestMustMPASetupWithAssets(t *testing.T) {
+	r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+	require.NoError(t, err)
+
+	mockFS := fstest.MapFS{
+		"custom_assets/style.css": &fstest.MapFile{
+			Data: []byte("body { color: red; }"),
+		},
+	}
+
+	assert.NotPanics(t, func() {
+		MustMPASetupWithAssets(r, mockFS, "custom_assets")
+	})
+}
+
+func TestMPASupport(t *testing.T) {
+	t.Run("serves multiple html pages from embedded FS", func(t *testing.T) {
+		mockFS := fstest.MapFS{
+			"index.html": &fstest.MapFile{
+				Data: []byte("<html>index</html>"),
+			},
+			"about.html": &fstest.MapFile{
+				Data: []byte("<html>about</html>"), 
+			},
+			"contact.html": &fstest.MapFile{
+				Data: []byte("<html>contact</html>"),
+			},
+			StaticAssetsDir + "/style.css": &fstest.MapFile{
+				Data: []byte("body { color: red; }"),
+			},
+		}
+
+		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+		require.NoError(t, err)
+
+		err = SetupStaticRoutes(r, StaticConfig{
+			FS:  mockFS,
+			MPA: true, // Enable MPA mode
+		})
+		require.NoError(t, err)
+
+		cases := []struct {
+			path string
+			want string
+		}{
+			{"/", "<html>index</html>"},
+			{"/about.html", "<html>about</html>"},
+			{"/contact.html", "<html>contact</html>"},
+			{StaticAssetsPath + "/style.css", "body { color: red; }"},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.path, func(t *testing.T) {
+				req := httptest.NewRequest("GET", tc.path, nil)
+				rr := httptest.NewRecorder()
+				GetRouter(r).ServeHTTP(rr, req)
+
+				assert.Equal(t, http.StatusOK, rr.Code)
+				assert.Equal(t, tc.want, rr.Body.String())
+			})
+		}
+
+		// Test API routes still return 404
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		rr := httptest.NewRecorder()
+		GetRouter(r).ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
+	t.Run("serves multiple html pages from directory", func(t *testing.T) {
+		dir := t.TempDir()
+		files := map[string]string{
+			"index.html":   "<html>index</html>",
+			"about.html":   "<html>about</html>",
+			"contact.html": "<html>contact</html>",
+			StaticAssetsDir + "/style.css": "body { color: red; }",
+		}
+
+		for name, content := range files {
+			path := filepath.Join(dir, name)
+			err := os.MkdirAll(filepath.Dir(path), 0755)
+			require.NoError(t, err)
+			err = os.WriteFile(path, []byte(content), 0644)
+			require.NoError(t, err)
+		}
+
+		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+		require.NoError(t, err)
+
+		err = SetupStaticRoutes(r, StaticConfig{
+			DirPath: dir,
+			MPA:     true, // Enable MPA mode
+		})
+		require.NoError(t, err)
+
+		cases := []struct {
+			path string
+			want string
+		}{
+			{"/", "<html>index</html>"},
+			{"/about.html", "<html>about</html>"},
+			{"/contact.html", "<html>contact</html>"},
+			{StaticAssetsPath + "/style.css", "body { color: red; }"},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.path, func(t *testing.T) {
+				req := httptest.NewRequest("GET", tc.path, nil)
+				rr := httptest.NewRecorder()
+				GetRouter(r).ServeHTTP(rr, req)
+
+				assert.Equal(t, http.StatusOK, rr.Code)
+				assert.Equal(t, tc.want, rr.Body.String())
+			})
+		}
+	})
+
+	t.Run("ignores indexFile in MPA mode", func(t *testing.T) {
+		mockFS := fstest.MapFS{
+			"index.html": &fstest.MapFile{
+				Data: []byte("<html>index</html>"),
+			},
+			"other.html": &fstest.MapFile{
+				Data: []byte("<html>other</html>"),
+			},
+		}
+
+		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+		require.NoError(t, err)
+
+		err = SetupStaticRoutes(r, StaticConfig{
+			FS:        mockFS,
+			IndexFile: "other.html", // Should be ignored
+			MPA:       true,
+		})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("GET", "/", nil)
+		rr := httptest.NewRecorder()
+		GetRouter(r).ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "<html>index</html>", rr.Body.String())
+	})
+}
+
 func TestSPAFallback(t *testing.T) {
 	t.Run("serves index.html for unknown paths", func(t *testing.T) {
 		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
