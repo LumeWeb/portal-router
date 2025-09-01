@@ -12,6 +12,74 @@ import (
 )
 
 func TestStaticFileServing(t *testing.T) {
+	t.Run("serves favicon files from root", func(t *testing.T) {
+		// Create temp dir with favicon files
+		dir := t.TempDir()
+		
+		cases := []struct {
+			path   string
+			body   string
+			ctype  string
+		}{
+			{"/favicon.ico", "ico content", "image/x-icon"},
+			{"/favicon.png", "png content", "image/png"},
+			{"/favicon.svg", "svg content", "image/svg+xml"},
+			{"/favicon.gif", "gif content", "image/gif"},
+		}
+
+		// Create favicon files in root
+		for _, tc := range cases {
+			err := os.WriteFile(filepath.Join(dir, tc.path[1:]), []byte(tc.body), 0644)
+			require.NoError(t, err)
+		}
+
+		// Setup router with static config
+		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+		require.NoError(t, err)
+
+		err = SetupStaticRoutes(r, StaticConfig{DirPath: dir})
+		require.NoError(t, err)
+
+		for _, tc := range cases {
+			t.Run(tc.path, func(t *testing.T) {
+				// Test GET
+				req := httptest.NewRequest("GET", tc.path, nil)
+				rr := httptest.NewRecorder()
+				GetRouter(r).ServeHTTP(rr, req)
+				assert.Equal(t, http.StatusOK, rr.Code)
+				assert.Equal(t, tc.body, rr.Body.String())
+				assert.Equal(t, tc.ctype, rr.Header().Get("Content-Type"))
+				assert.Equal(t, "public, max-age=31536000, immutable", rr.Header().Get("Cache-Control"))
+
+				// Test HEAD
+				req = httptest.NewRequest("HEAD", tc.path, nil)
+				rr = httptest.NewRecorder()
+				GetRouter(r).ServeHTTP(rr, req)
+				assert.Equal(t, http.StatusOK, rr.Code)
+				assert.Equal(t, "", rr.Body.String())
+				assert.Equal(t, tc.ctype, rr.Header().Get("Content-Type"))
+				assert.Equal(t, "public, max-age=31536000, immutable", rr.Header().Get("Cache-Control"))
+			})
+		}
+	})
+
+	t.Run("returns 404 for missing favicon files", func(t *testing.T) {
+		// Create temp dir without favicon files
+		dir := t.TempDir()
+
+		// Setup router with static config
+		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+		require.NoError(t, err)
+
+		err = SetupStaticRoutes(r, StaticConfig{DirPath: dir})
+		require.NoError(t, err)
+
+		// Test missing favicon returns 404
+		req := httptest.NewRequest("GET", "/favicon.ico", nil)
+		rr := httptest.NewRecorder()
+		GetRouter(r).ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
 	t.Run("serves files from directory", func(t *testing.T) {
 		// Create temp dir with test file under assets subdir
 		dir := t.TempDir()
@@ -123,6 +191,92 @@ func TestFSAdapter(t *testing.T) {
 }
 
 func TestStaticFileServingFS(t *testing.T) {
+	t.Run("serves favicon files from fs.FS", func(t *testing.T) {
+		cases := []struct {
+			path   string
+			body   string
+			ctype  string
+		}{
+			{"/favicon.ico", "ico content", "image/x-icon"},
+			{"/favicon.png", "png content", "image/png"},
+			{"/favicon.svg", "svg content", "image/svg+xml"},
+			{"/favicon.gif", "gif content", "image/gif"},
+		}
+
+		mockFS := fstest.MapFS{
+			"index.html": &fstest.MapFile{
+				Data: []byte("<html>SPA</html>"),
+				Mode: 0644,
+			},
+		}
+		for _, tc := range cases {
+			mockFS[tc.path[1:]] = &fstest.MapFile{
+				Data: []byte(tc.body),
+				Mode: 0644,
+			}
+		}
+
+		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+		require.NoError(t, err)
+
+		err = SetupStaticRoutes(r, StaticConfig{
+			FS:        mockFS,
+			IndexFile: "index.html",
+		})
+		require.NoError(t, err)
+
+		for _, tc := range cases {
+			t.Run(tc.path, func(t *testing.T) {
+				// Test GET
+				req := httptest.NewRequest("GET", tc.path, nil)
+				rr := httptest.NewRecorder()
+				GetRouter(r).ServeHTTP(rr, req)
+				assert.Equal(t, http.StatusOK, rr.Code)
+				assert.Equal(t, tc.body, rr.Body.String())
+				assert.Equal(t, tc.ctype, rr.Header().Get("Content-Type"))
+				assert.Equal(t, "public, max-age=31536000, immutable", rr.Header().Get("Cache-Control"))
+
+				// Test HEAD
+				req = httptest.NewRequest("HEAD", tc.path, nil)
+				rr = httptest.NewRecorder()
+				GetRouter(r).ServeHTTP(rr, req)
+				assert.Equal(t, http.StatusOK, rr.Code)
+				assert.Equal(t, "", rr.Body.String())
+				assert.Equal(t, tc.ctype, rr.Header().Get("Content-Type"))
+				assert.Equal(t, "public, max-age=31536000, immutable", rr.Header().Get("Cache-Control"))
+			})
+		}
+	})
+
+	t.Run("serves favicon files from static directory in fs.FS", func(t *testing.T) {
+		mockFS := fstest.MapFS{
+			StaticAssetsDir + "/favicon.ico": &fstest.MapFile{
+				Data: []byte("ico content"),
+				Mode: 0644,
+			},
+			"index.html": &fstest.MapFile{
+				Data: []byte("<html>SPA</html>"),
+				Mode: 0644,
+			},
+		}
+
+		r, err := NewRouter(APIInfo().Title("Test").Version("1.0"))
+		require.NoError(t, err)
+
+		err = SetupStaticRoutes(r, StaticConfig{
+			FS:        mockFS,
+			IndexFile: "index.html",
+		})
+		require.NoError(t, err)
+
+		// Test favicon serving from static directory
+		req := httptest.NewRequest("GET", "/favicon.ico", nil)
+		rr := httptest.NewRecorder()
+		GetRouter(r).ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "ico content", rr.Body.String())
+		assert.Equal(t, "image/x-icon", rr.Header().Get("Content-Type"))
+	})
 	t.Run("serves files from MapFS", func(t *testing.T) {
 		mockFS := fstest.MapFS{
 			StaticAssetsDir + "/test.txt": &fstest.MapFile{
