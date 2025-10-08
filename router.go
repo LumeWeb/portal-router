@@ -2,11 +2,12 @@ package router
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/invopop/jsonschema"
 	"go.lumeweb.com/gswagger/apirouter"
 	"go.lumeweb.com/portal-middleware/cors"
-	"net/http"
-	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"
@@ -74,9 +75,15 @@ func GetGroupRouter(r Router) *echo.Group {
 //	    log.Fatal(err)
 //	}
 func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, error) {
+	echoFactory := func() *echo.Echo {
+		e := echo.New()
+		e.IPExtractor = echo.ExtractIPFromXFFHeader()
+		return e
+	}
+
 	// Initialize config with defaults
 	config := &RouterConfig{
-		EchoRouter: echo.New(),
+		EchoRouter: echoFactory(),
 		OpenAPI: &openapi3.T{
 			Info: info.toOpenAPI(),
 			Servers: []*openapi3.Server{
@@ -89,7 +96,7 @@ func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, err
 			JSONDocumentationPath: SwaggerJSONPath,
 			YAMLDocumentationPath: SwaggerYAMLPath,
 			FrameworkRouterFactory: func() apirouter.Router[echo.HandlerFunc, echo.MiddlewareFunc, es.Route] {
-				return es.NewRouter(echo.New())
+				return es.NewRouter(echoFactory())
 			},
 		},
 	}
