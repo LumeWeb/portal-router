@@ -77,6 +77,8 @@ func GetGroupRouter(r Router) *echo.Group {
 func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, error) {
 	echoFactory := func() *echo.Echo {
 		e := echo.New()
+		// Trusted proxy assumption: service should be behind reverse proxy like nginx/Cloudflare
+		// Do not expose service directly to untrusted networks
 		e.IPExtractor = echo.ExtractIPFromXFFHeader()
 		return e
 	}
