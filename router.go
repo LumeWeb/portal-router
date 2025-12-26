@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -343,7 +344,7 @@ func RegisterRoutes(
 
 		// Register access control if needed
 		if finalRoute.Access != "" && accessSvc != nil {
-			if err := accessSvc.RegisterRoute(subdomain, finalRoute.Path, finalRoute.Method, finalRoute.Access); err != nil {
+			if err := accessSvc.RegisterRoute(context.Background(), subdomain, finalRoute.Path, finalRoute.Method, finalRoute.Access); err != nil {
 				return fmt.Errorf("failed to register access for route %s: %w", finalRoute.Path, err)
 			}
 		}

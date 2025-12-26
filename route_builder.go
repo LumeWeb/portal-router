@@ -1,19 +1,21 @@
 package router
 
 import (
+	"context"
+	"net/http"
+
 	"github.com/labstack/echo/v4"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/portal-middleware/cors"
-	"net/http"
 )
 
 // AccessService defines the interface for route access control
 type AccessService interface {
 	// CheckAccess verifies if a user has access to a specific route
-	CheckAccess(userId uint, fqdn, path, method string) (bool, error)
+	CheckAccess(ctx context.Context, userId uint, fqdn, path, method string) (bool, error)
 
 	// RegisterRoute registers a new route with its access requirements
-	RegisterRoute(subdomain, path, method, role string) error
+	RegisterRoute(ctx context.Context, subdomain, path, method, role string) error
 }
 
 // Common access role constants
