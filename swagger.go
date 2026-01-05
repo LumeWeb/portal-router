@@ -2,11 +2,12 @@ package router
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
+
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	"go.lumeweb.com/queryutil/filter"
-	"net/http"
-	"strings"
 )
 
 const (
@@ -581,7 +582,7 @@ func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 						})
 				} else {
 					// Single value parameter
-					*d = SwaggerFilterParam(*d, simpleParam, paramDesc, nil)
+					*d = SwaggerFilterParam(*d, simpleParam, paramDesc, "")
 				}
 
 				// Add complex format param
@@ -589,7 +590,7 @@ func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 				*d = SwaggerFilterParam(*d, complexParam,
 					fmt.Sprintf("Filter by %s %s",
 						fieldName, strings.ToLower(op)),
-					nil)
+					"")
 			}
 		}
 	}
