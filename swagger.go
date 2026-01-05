@@ -64,7 +64,7 @@ func WithFileUpload(description string, required bool) SwaggerOption {
 			Content: map[string]swagger.Schema{
 				"multipart/form-data": {
 					Value: struct {
-						File string `json:"file" form:"file"`
+						File string `json:"file" jsonschema:"type=string,format=binary"`
 					}{},
 				},
 			},
