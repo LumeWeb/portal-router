@@ -37,14 +37,19 @@ func applySwaggerDefaults(def *swagger.Definitions) {
 	if def.Responses == nil {
 		def.Responses = make(map[int]swagger.ContentValue)
 	}
-	// Check if user explicitly opted out of default 200 response
-	// WithoutDefaultSuccessResponse sets a marker (-1) to prevent re-adding
 	if _, hasNoDefaultMarker := def.Responses[-1]; hasNoDefaultMarker {
-		delete(def.Responses, -1) // Clean up marker
-		return // Skip adding 200
+		return
 	}
 	if _, ok := def.Responses[http.StatusOK]; !ok {
 		def.Responses[http.StatusOK] = defaultSuccessResponse()
+	}
+}
+
+// clearSwaggerMarkers removes internal markers from swagger definitions.
+// Called in RegisterRoutes before passing swagger to the router.
+func clearSwaggerMarkers(def *swagger.Definitions) {
+	if def.Responses != nil {
+		delete(def.Responses, -1)
 	}
 }
 

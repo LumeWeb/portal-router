@@ -330,6 +330,9 @@ func RegisterRoutes(
 		// Apply all route options including common ones
 		finalRoute := applyRouteOpts(route, commonOpts...)
 
+		// Clean up internal markers before registering
+		clearSwaggerMarkers(&finalRoute.Swagger)
+
 		// Register route with router
 		_, err := group.AddRoute(
 			finalRoute.Method,
