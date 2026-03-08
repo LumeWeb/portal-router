@@ -71,6 +71,9 @@ func applyRouteOpts(d RouteDefinition, opts ...RouteOption) RouteDefinition {
 		}
 	}
 
+	// Apply default Swagger responses for consistency
+	applySwaggerDefaults(&result.Swagger)
+
 	// Prepend CORS middleware if configured
 	if result.CorsConfig != nil {
 		corsHandler := cors.NewWithDefaults(*result.CorsConfig)
