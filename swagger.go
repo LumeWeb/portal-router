@@ -130,6 +130,7 @@ func WithDescription(description string) SwaggerOption {
 
 // WithSwagger creates a RouteOption that sets the Swagger documentation definitions
 // for a route. Automatically includes appropriate error responses based on access level.
+// Adds a default 200 OK success response for backward compatibility.
 // Preserves any existing success responses (2xx status codes) and allows custom
 // success responses from options to be merged.
 func WithSwagger(opts ...SwaggerOption) RouteOption {
@@ -146,6 +147,9 @@ func WithSwagger(opts ...SwaggerOption) RouteOption {
 		if d.Swagger.Responses == nil {
 			d.Swagger.Responses = make(map[int]swagger.ContentValue)
 		}
+
+		// Apply default Swagger responses
+		applySwaggerDefaults(&d.Swagger)
 
 		// Merge default error responses into existing responses, preserving existing success responses
 		d.Swagger.Responses = MergeResponses(d.Swagger.Responses, defaultErrors)
@@ -339,6 +343,21 @@ func DefineResponse(status int, description string, opts ...ResponseOption) map[
 
 	return map[int]swagger.ContentValue{
 		status: contentValue,
+	}
+}
+
+// WithoutDefaultSuccessResponse removes the default 200 OK response from swagger definitions.
+// Use this when an endpoint returns a different success status code (e.g., 302 redirect, 201 created).
+// This option should be used alongside WithSuccessResponse to define the custom success response.
+// Sets a marker to prevent applySwaggerDefaults from re-adding the 200 response.
+func WithoutDefaultSuccessResponse() SwaggerOption {
+	return func(d *swagger.Definitions, accessRole string) {
+		if d.Responses == nil {
+			d.Responses = make(map[int]swagger.ContentValue)
+		}
+		delete(d.Responses, http.StatusOK)
+		// Set marker to prevent re-adding 200 in applySwaggerDefaults
+		d.Responses[-1] = swagger.ContentValue{Description: "NO_DEFAULT_200"}
 	}
 }
 

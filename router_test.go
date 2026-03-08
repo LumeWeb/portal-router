@@ -236,6 +236,14 @@ func TestSwaggerDocsServed(t *testing.T) {
 			Path:    "/test",
 			Method:  "GET",
 			Handler: func(c echo.Context) error { return nil },
+			Swagger: swagger.Definitions{
+				Responses: map[int]swagger.ContentValue{
+					http.StatusOK: {
+						Description: "Success",
+						Content:     swagger.Content{MediaTypeJSON: {Value: map[string]string{"message": "OK"}}},
+					},
+				},
+			},
 		},
 	)
 	err = RegisterRoutes(eRouter, nil, "", routes)

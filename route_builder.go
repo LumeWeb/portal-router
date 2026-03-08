@@ -71,19 +71,14 @@ func applyRouteOpts(d RouteDefinition, opts ...RouteOption) RouteDefinition {
 		}
 	}
 
+	// Apply default Swagger responses for consistency
+	applySwaggerDefaults(&result.Swagger)
+
 	// Prepend CORS middleware if configured
 	if result.CorsConfig != nil {
 		corsHandler := cors.NewWithDefaults(*result.CorsConfig)
 		result.Middlewares = append([]echo.MiddlewareFunc{echo.WrapMiddleware(corsHandler)}, result.Middlewares...)
 	}
-
-	// Ensure we have at least the default success response, preserving existing ones
-	result.Swagger.Responses = MergeResponses(
-		result.Swagger.Responses,
-		map[int]swagger.ContentValue{
-			http.StatusOK: defaultSuccessResponse(),
-		},
-	)
 
 	return result
 }
