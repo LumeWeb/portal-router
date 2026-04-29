@@ -92,7 +92,7 @@ func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, err
 			Info: info.toOpenAPI(),
 			Servers: []*openapi3.Server{
 				{
-					URL: "/api",
+					URL: "/",
 				},
 			},
 		},
