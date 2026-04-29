@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
 
 	"github.com/invopop/jsonschema"
@@ -347,7 +348,9 @@ func RegisterRoutes(
 
 		// Register access control if needed
 		if finalRoute.Access != "" && accessSvc != nil {
-			if err := accessSvc.RegisterRoute(context.Background(), subdomain, finalRoute.Path, finalRoute.Method, finalRoute.Access); err != nil {
+			// Get full path including any group prefix for ACL registration
+			fullPath := path.Join(gRouter.GetPathPrefix(), finalRoute.Path)
+			if err := accessSvc.RegisterRoute(context.Background(), subdomain, fullPath, finalRoute.Method, finalRoute.Access); err != nil {
 				return fmt.Errorf("failed to register access for route %s: %w", finalRoute.Path, err)
 			}
 		}
