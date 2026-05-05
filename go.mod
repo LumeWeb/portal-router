@@ -9,7 +9,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/stretchr/testify v1.11.1
-	go.lumeweb.com/gswagger v0.20.11
+	go.lumeweb.com/gswagger v0.20.12
 	go.lumeweb.com/portal-middleware v0.3.4
 	go.lumeweb.com/queryutil v0.3.15
 	golang.org/x/net v0.48.0
