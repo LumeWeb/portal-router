@@ -18,7 +18,7 @@ var _ fs.FS = (*AppFilesystem)(nil)
 var _ fs.FileInfo = (*appFileInfo)(nil)
 
 // loaderLogoRe matches <div data-loader-logo ...>inner content</div>
-var loaderLogoRe = regexp.MustCompile(`(<div\s+data-loader-logo\s+[^>]*>)([\s\S]*?)(</div>)`)
+var loaderLogoRe = regexp.MustCompile(`(<div\s+data-loader-logo(?:\s+[^>]*)?>)([\s\S]*?)(</div>)`)
 
 type AppFilesystemConfig struct {
 	Domain    string

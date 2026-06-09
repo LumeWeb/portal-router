@@ -341,6 +341,45 @@ func TestAppFilesystem_BrandLogoReplacement(t *testing.T) {
 	}
 }
 
+func TestAppFilesystem_BrandLogoReplacementBareAttribute(t *testing.T) {
+	brandJSON := `{"logoUrl":"https://branded.com/logo.png"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body><div data-loader-logo><svg>old</svg></div></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, `<img alt="Logo" src="https://branded.com/logo.png"`) {
+		t.Errorf("Logo not replaced for bare data-loader-logo: %s", contentStr)
+	}
+
+	if strings.Contains(contentStr, "<svg>old</svg>") {
+		t.Errorf("Old logo content not removed: %s", contentStr)
+	}
+}
+
 func TestAppFilesystem_BrandWithoutLogoNoReplacement(t *testing.T) {
 	brandJSON := `{"tagline":"No Logo Portal"}`
 
