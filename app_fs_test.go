@@ -20,25 +20,24 @@ func TestNewAppFilesystem(t *testing.T) {
 	})
 
 	portalDomain := "example.com"
-	appFS := NewAppFilesystem(fsys, portalDomain)
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{Domain: portalDomain})
 
 	if appFS == nil {
 		t.Fatal("NewAppFilesystem returned nil")
 	}
 
-	if appFS.portalDomain != portalDomain {
-		t.Errorf("portalDomain is not set correctly. Expected: %s, got: %s", portalDomain, appFS.portalDomain)
+	if appFS.config.Domain != portalDomain {
+		t.Errorf("Domain not set correctly. Expected: %s, got: %s", portalDomain, appFS.config.Domain)
 	}
 
-	if appFS.portalIsSubdomain {
-		t.Error("portalIsSubdomain should be false for example.com")
+	if appFS.isSubdomain {
+		t.Error("isSubdomain should be false for example.com")
 	}
 
-	portalDomain = "sub.example.co.uk"
-	appFS = NewAppFilesystem(fsys, portalDomain)
+	appFS = NewAppFilesystem(fsys, AppFilesystemConfig{Domain: "sub.example.co.uk"})
 
-	if !appFS.portalIsSubdomain {
-		t.Error("portalIsSubdomain should be true for sub.example.co.uk")
+	if !appFS.isSubdomain {
+		t.Error("isSubdomain should be true for sub.example.co.uk")
 	}
 }
 
@@ -48,8 +47,7 @@ func TestAppFilesystem_Open_NonIndex(t *testing.T) {
 		"static/app.js":  `console.log("app.js");`,
 	})
 
-	portalDomain := "example.com"
-	appFS := NewAppFilesystem(fsys, portalDomain)
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{Domain: "example.com"})
 
 	file, err := appFS.Open("static/app.js")
 	if err != nil {
@@ -79,8 +77,7 @@ func TestAppFilesystem_Open_Index(t *testing.T) {
 		"static/app.js":  `console.log("app.js");`,
 	})
 
-	portalDomain := "example.com"
-	appFS := NewAppFilesystem(fsys, portalDomain)
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{Domain: "example.com"})
 
 	file, err := appFS.Open(DefaultIndexFile)
 	if err != nil {
@@ -99,16 +96,24 @@ func TestAppFilesystem_Open_Index(t *testing.T) {
 	}
 
 	contentStr := string(content)
+
+	// Domain and isRoot should be in separate script tags
 	if !strings.Contains(contentStr, "window.VITE_PORTAL_DOMAIN = 'example.com'") {
 		t.Errorf("Modified index.html does not contain portal domain: %s", contentStr)
 	}
 
-	if strings.Contains(contentStr, "window.VITE_PORTAL_DOMAIN_IS_ROOT = true") {
-		t.Errorf("Modified index.html incorrectly contains portal is root: %s", contentStr)
+	if !strings.Contains(contentStr, "window.VITE_PORTAL_DOMAIN_IS_ROOT = false") {
+		t.Errorf("Modified index.html does not contain VITE_PORTAL_DOMAIN_IS_ROOT = false: %s", contentStr)
 	}
 
-	if !strings.Contains(contentStr, "<script type=\"text/javascript\">window.VITE_PORTAL_DOMAIN") {
-		t.Errorf("Modified index.html does not contain script tag: %s", contentStr)
+	if strings.Contains(contentStr, "VITE_PORTAL_BRAND") {
+		t.Errorf("Modified index.html should not contain VITE_PORTAL_BRAND when not configured: %s", contentStr)
+	}
+
+	// Verify both script tags exist
+	scriptCount := strings.Count(contentStr, `<script type="text/javascript">`)
+	if scriptCount != 2 {
+		t.Errorf("Expected 2 script tags, got %d: %s", scriptCount, contentStr)
 	}
 
 	// Parse HTML to verify script position
@@ -122,9 +127,9 @@ func TestAppFilesystem_Open_Index(t *testing.T) {
 		t.Fatal("No head element found in modified HTML")
 	}
 
-	// Verify script is first child
+	// Verify first child is a script tag
 	if head.FirstChild == nil || head.FirstChild.Data != "script" {
-		t.Error("Script tag is not first child of head")
+		t.Error("First child of head is not a script tag")
 	}
 }
 
@@ -133,8 +138,7 @@ func TestAppFilesystem_Open_Index_EmptyHead(t *testing.T) {
 		DefaultIndexFile: `<html><head></head><body><h1>Hello</h1></body></html>`,
 	})
 
-	portalDomain := "example.com"
-	appFS := NewAppFilesystem(fsys, portalDomain)
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{Domain: "example.com"})
 
 	file, err := appFS.Open(DefaultIndexFile)
 	if err != nil {
@@ -157,7 +161,6 @@ func TestAppFilesystem_Open_Index_EmptyHead(t *testing.T) {
 		t.Errorf("Modified index.html does not contain script tag: %s", contentStr)
 	}
 
-	// Parse HTML to verify script position
 	doc, err := html.Parse(strings.NewReader(contentStr))
 	if err != nil {
 		t.Fatalf("Failed to parse modified HTML: %v", err)
@@ -168,12 +171,8 @@ func TestAppFilesystem_Open_Index_EmptyHead(t *testing.T) {
 		t.Fatal("No head element found in modified HTML")
 	}
 
-	// Verify script is only child
 	if head.FirstChild == nil || head.FirstChild.Data != "script" {
 		t.Error("Script tag is not first child of head")
-	}
-	if head.FirstChild != head.LastChild {
-		t.Error("Head contains more than just the script tag")
 	}
 }
 
@@ -183,10 +182,8 @@ func TestAppFilesystem_Open_Index_Cached(t *testing.T) {
 		"static/app.js":  `console.log("app.js");`,
 	})
 
-	portalDomain := "example.com"
-	appFS := NewAppFilesystem(fsys, portalDomain)
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{Domain: "example.com"})
 
-	// First open to cache the content
 	file1, err := appFS.Open(DefaultIndexFile)
 	if err != nil {
 		t.Fatalf("Failed to open index.html: %v", err)
@@ -203,7 +200,6 @@ func TestAppFilesystem_Open_Index_Cached(t *testing.T) {
 		t.Fatalf("Failed to read index.html: %v", err)
 	}
 
-	// Second open to retrieve from cache
 	file2, err := appFS.Open(DefaultIndexFile)
 	if err != nil {
 		t.Fatalf("Failed to open index.html from cache: %v", err)
@@ -231,8 +227,7 @@ func TestAppFilesystem_ModifyIndexHTML_NoHead(t *testing.T) {
 		DefaultIndexFile: `<html><body><h1>Hello</h1></body></html>`,
 	})
 
-	portalDomain := "example.com"
-	appFS := NewAppFilesystem(fsys, portalDomain)
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{Domain: "example.com"})
 
 	file, err := appFS.Open(DefaultIndexFile)
 	if err != nil {
@@ -256,7 +251,251 @@ func TestAppFilesystem_ModifyIndexHTML_NoHead(t *testing.T) {
 	}
 }
 
-// NewTestFS creates an in-memory fs.FS for testing.
+func TestAppFilesystem_BrandInjection(t *testing.T) {
+	brandJSON := `{"tagline":"Custom Portal","logoUrl":"https://example.com/logo.svg","social":{"github":"https://github.com/test"}}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body><h1>Hello</h1></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "window.VITE_PORTAL_BRAND = ") {
+		t.Errorf("Modified index.html does not contain VITE_PORTAL_BRAND: %s", contentStr)
+	}
+
+	// Brand value should be JSON-stringified (double-quoted string)
+	if !strings.Contains(contentStr, `window.VITE_PORTAL_BRAND = "{\"tagline\":\"Custom Portal\"`) {
+		t.Errorf("VITE_PORTAL_BRAND not properly JSON-encoded: %s", contentStr)
+	}
+
+	// Should have 3 script tags: domain, isRoot, brand
+	scriptCount := strings.Count(contentStr, `<script type="text/javascript">`)
+	if scriptCount != 3 {
+		t.Errorf("Expected 3 script tags, got %d: %s", scriptCount, contentStr)
+	}
+}
+
+func TestAppFilesystem_BrandLogoReplacement(t *testing.T) {
+	brandJSON := `{"logoUrl":"https://branded.com/logo.png"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body><div data-loader-logo class="w-28 h-28"><svg>old</svg></div></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, `<img alt="Logo" src="https://branded.com/logo.png"`) {
+		t.Errorf("Logo not replaced: %s", contentStr)
+	}
+
+	if strings.Contains(contentStr, "<svg>old</svg>") {
+		t.Errorf("Old logo content not removed: %s", contentStr)
+	}
+
+	// data-loader-logo div should still exist
+	if !strings.Contains(contentStr, `data-loader-logo`) {
+		t.Errorf("data-loader-logo div removed: %s", contentStr)
+	}
+}
+
+func TestAppFilesystem_BrandLogoReplacementBareAttribute(t *testing.T) {
+	brandJSON := `{"logoUrl":"https://branded.com/logo.png"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body><div data-loader-logo><svg>old</svg></div></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, `<img alt="Logo" src="https://branded.com/logo.png"`) {
+		t.Errorf("Logo not replaced for bare data-loader-logo: %s", contentStr)
+	}
+
+	if strings.Contains(contentStr, "<svg>old</svg>") {
+		t.Errorf("Old logo content not removed: %s", contentStr)
+	}
+}
+
+func TestAppFilesystem_BrandWithoutLogoNoReplacement(t *testing.T) {
+	brandJSON := `{"tagline":"No Logo Portal"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body><div data-loader-logo class="w-28 h-28"><svg>old</svg></div></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Original logo content should still be present when no logoUrl
+	if !strings.Contains(contentStr, "<svg>old</svg>") {
+		t.Errorf("Original logo content should not be replaced when no logoUrl: %s", contentStr)
+	}
+}
+
+func TestAppFilesystem_BrandOnlyNoDomain(t *testing.T) {
+	brandJSON := `{"tagline":"Brand Only"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{BrandJSON: brandJSON})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if strings.Contains(contentStr, "VITE_PORTAL_DOMAIN") {
+		t.Errorf("Should not contain VITE_PORTAL_DOMAIN when domain not set: %s", contentStr)
+	}
+
+	if !strings.Contains(contentStr, "VITE_PORTAL_BRAND") {
+		t.Errorf("Should contain VITE_PORTAL_BRAND: %s", contentStr)
+	}
+}
+
+func TestAppFilesystem_InvalidBrandJSON(t *testing.T) {
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head></head><body></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: `{invalid json`,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Domain vars should still work even with invalid brand JSON
+	if !strings.Contains(contentStr, "window.VITE_PORTAL_DOMAIN = 'example.com'") {
+		t.Errorf("Domain injection should still work with invalid brand JSON: %s", contentStr)
+	}
+
+	// Brand should still be injected (as a string, json.Marshal will handle it)
+	if !strings.Contains(contentStr, "window.VITE_PORTAL_BRAND = ") {
+		t.Errorf("Brand should still be injected even with invalid JSON object: %s", contentStr)
+	}
+
+	// No logo replacement should happen when JSON parsing fails
+	if appFS.brandLogoURL != "" {
+		t.Errorf("brandLogoURL should be empty when brand JSON parsing fails")
+	}
+}
+
 func findHeadElement(doc *html.Node) *html.Node {
 	var head *html.Node
 	var f func(*html.Node)
@@ -282,22 +521,17 @@ func NewTestFS(files map[string]string) fs.FS {
 }
 
 func TestAppFilesystemIntegration(t *testing.T) {
-	// Create a test file system
 	fsys := NewTestFS(map[string]string{
 		DefaultIndexFile: `<html><head><title>Test</title></head><body><h1>Hello</h1></body></html>`,
 		"static/app.js":  `console.log("app.js");`,
 	})
 
-	// Create an AppFilesystem instance
-	portalDomain := "example.com"
-	appFS := NewAppFilesystem(fsys, portalDomain)
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{Domain: "example.com"})
 
-	// Create a test HTTP server
 	handler := http.FileServer(http.FS(appFS))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	// Make a request to the index file
 	resp, err := http.Get(server.URL + "/" + DefaultIndexFile)
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
@@ -309,24 +543,20 @@ func TestAppFilesystemIntegration(t *testing.T) {
 		}
 	}(resp.Body)
 
-	// Check the response status code
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
-	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("Failed to read response body: %v", err)
 	}
 
-	// Check if the portal domain is injected correctly
 	bodyStr := string(body)
 	if !strings.Contains(bodyStr, "window.VITE_PORTAL_DOMAIN = 'example.com'") {
 		t.Errorf("Response body does not contain portal domain: %s", bodyStr)
 	}
 
-	// Make a request to a static file
 	resp, err = http.Get(server.URL + "/static/app.js")
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
@@ -338,18 +568,15 @@ func TestAppFilesystemIntegration(t *testing.T) {
 		}
 	}(resp.Body)
 
-	// Check the response status code
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
-	// Read the response body
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("Failed to read response body: %v", err)
 	}
 
-	// Check if the static file content is correct
 	bodyStr = string(body)
 	if !strings.Contains(bodyStr, `console.log("app.js");`) {
 		t.Errorf("Response body does not contain correct static file content: %s", bodyStr)
