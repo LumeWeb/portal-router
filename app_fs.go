@@ -115,12 +115,12 @@ func (a *AppFilesystem) modifyIndexHTML(content []byte) []byte {
 	}
 
 	// Favicon href replacement on raw HTML — same regex approach as logo.
-	// No HTML escaping needed: the URL is inserted between matched quotes
-	// in the regex, so it cannot break out of the attribute.
-	// Use ${1}/${3} syntax so the URL's first char isn't absorbed into the
-	// group reference name (e.g. "$1https" would be read as group "1h").
+	// Escape HTML special chars in the URL (consistent with logo replacement)
+	// and escape $ to $$ so ReplaceAll doesn't interpret them as group refs.
 	if a.brandFaviconURL != "" {
-		replacement := []byte(fmt.Sprintf(`${1}%s${3}`, a.brandFaviconURL))
+		favEscaped := html.EscapeString(a.brandFaviconURL)
+		favEscaped = strings.ReplaceAll(favEscaped, "$", "$$")
+		replacement := []byte(fmt.Sprintf(`${1}%s${3}`, favEscaped))
 		content = faviconLinkRe.ReplaceAll(content, replacement)
 	}
 

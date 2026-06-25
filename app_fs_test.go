@@ -610,6 +610,42 @@ func TestAppFilesystem_BrandWithoutFaviconNoReplacement(t *testing.T) {
 	}
 }
 
+func TestAppFilesystem_BrandFaviconSpecialChars(t *testing.T) {
+	brandJSON := `{"faviconUrl":"https://cdn.example.com/favicon?v=1&x=$2"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /></head><body></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// & should be HTML-escaped to &amp;
+	if !strings.Contains(contentStr, `href="https://cdn.example.com/favicon?v=1&amp;x=$2"`) {
+		t.Errorf("Favicon URL with special chars not properly escaped: %s", contentStr)
+	}
+}
+
 func findHeadElement(doc *html.Node) *html.Node {
 	var head *html.Node
 	var f func(*html.Node)
