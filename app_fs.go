@@ -20,13 +20,17 @@ var _ fs.FileInfo = (*appFileInfo)(nil)
 // loaderLogoRe matches <div data-loader-logo ...>inner content</div>
 var loaderLogoRe = regexp.MustCompile(`(<div\s+data-loader-logo(?:\s+[^>]*)?>)([\s\S]*?)(</div>)`)
 
+// faviconLinkRe matches <link rel="icon" ... href="..."> to replace the href
+var faviconLinkRe = regexp.MustCompile(`(<link\s+rel=["']icon["'][^>]*\shref=["'])([^"']*)(["'])`)
+
 type AppFilesystemConfig struct {
 	Domain    string
 	BrandJSON string
 }
 
 type BrandConfig struct {
-	LogoURL string `json:"logoUrl"`
+	LogoURL    string `json:"logoUrl"`
+	FaviconURL string `json:"faviconUrl"`
 }
 
 // AppFilesystem wraps an fs.FS to modify index.html content before serving it.
@@ -38,7 +42,8 @@ type AppFilesystem struct {
 	mu           sync.Mutex
 	config       AppFilesystemConfig
 	isSubdomain  bool
-	brandLogoURL string
+	brandLogoURL    string
+	brandFaviconURL string
 }
 
 // NewAppFilesystem creates a new AppFilesystem wrapping the provided fs.FS.
@@ -56,6 +61,7 @@ func NewAppFilesystem(fsys fs.FS, config AppFilesystemConfig) *AppFilesystem {
 		var brand BrandConfig
 		if err := json.Unmarshal([]byte(config.BrandJSON), &brand); err == nil {
 			a.brandLogoURL = brand.LogoURL
+			a.brandFaviconURL = brand.FaviconURL
 		}
 	}
 
@@ -106,6 +112,16 @@ func (a *AppFilesystem) modifyIndexHTML(content []byte) []byte {
 	if a.brandLogoURL != "" {
 		replacement := fmt.Sprintf(`$1<img alt="Logo" src="%s" />$3`, html.EscapeString(a.brandLogoURL))
 		content = loaderLogoRe.ReplaceAll(content, []byte(replacement))
+	}
+
+	// Favicon href replacement on raw HTML — same regex approach as logo.
+	// Escape HTML special chars in the URL (consistent with logo replacement)
+	// and escape $ to $$ so ReplaceAll doesn't interpret them as group refs.
+	if a.brandFaviconURL != "" {
+		favEscaped := html.EscapeString(a.brandFaviconURL)
+		favEscaped = strings.ReplaceAll(favEscaped, "$", "$$")
+		replacement := []byte(fmt.Sprintf(`${1}%s${3}`, favEscaped))
+		content = faviconLinkRe.ReplaceAll(content, replacement)
 	}
 
 	doc, err := html.Parse(bytes.NewReader(content))

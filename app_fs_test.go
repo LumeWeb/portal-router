@@ -496,6 +496,156 @@ func TestAppFilesystem_InvalidBrandJSON(t *testing.T) {
 	}
 }
 
+func TestAppFilesystem_BrandFaviconReplacement(t *testing.T) {
+	brandJSON := `{"faviconUrl":"https://branded.com/favicon.ico"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /></head><body></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, `href="https://branded.com/favicon.ico"`) {
+		t.Errorf("Favicon href not replaced: %s", contentStr)
+	}
+
+	if strings.Contains(contentStr, "/favicon.svg") {
+		t.Errorf("Original favicon href still present: %s", contentStr)
+	}
+}
+
+func TestAppFilesystem_BrandFaviconAndLogoReplacement(t *testing.T) {
+	brandJSON := `{"faviconUrl":"/custom-favicon.png","logoUrl":"https://branded.com/logo.png"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /></head><body><div data-loader-logo><svg>old</svg></div></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, `href="/custom-favicon.png"`) {
+		t.Errorf("Favicon href not replaced: %s", contentStr)
+	}
+
+	if !strings.Contains(contentStr, `<img alt="Logo" src="https://branded.com/logo.png"`) {
+		t.Errorf("Logo not replaced: %s", contentStr)
+	}
+}
+
+func TestAppFilesystem_BrandWithoutFaviconNoReplacement(t *testing.T) {
+	brandJSON := `{"logoUrl":"https://branded.com/logo.png"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /></head><body></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Original favicon should still be present when no faviconUrl
+	if !strings.Contains(contentStr, "/favicon.svg") {
+		t.Errorf("Original favicon should not be replaced when no faviconUrl: %s", contentStr)
+	}
+}
+
+func TestAppFilesystem_BrandFaviconSpecialChars(t *testing.T) {
+	brandJSON := `{"faviconUrl":"https://cdn.example.com/favicon?v=1&x=$2"}`
+
+	fsys := NewTestFS(map[string]string{
+		DefaultIndexFile: `<html><head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /></head><body></body></html>`,
+	})
+
+	appFS := NewAppFilesystem(fsys, AppFilesystemConfig{
+		Domain:    "example.com",
+		BrandJSON: brandJSON,
+	})
+
+	file, err := appFS.Open(DefaultIndexFile)
+	if err != nil {
+		t.Fatalf("Failed to open index.html: %v", err)
+	}
+	defer func(file fs.File) {
+		err = file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(file)
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("Failed to read index.html: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// & should be HTML-escaped to &amp;
+	if !strings.Contains(contentStr, `href="https://cdn.example.com/favicon?v=1&amp;x=$2"`) {
+		t.Errorf("Favicon URL with special chars not properly escaped: %s", contentStr)
+	}
+}
+
 func findHeadElement(doc *html.Node) *html.Node {
 	var head *html.Node
 	var f func(*html.Node)
