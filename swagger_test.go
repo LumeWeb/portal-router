@@ -35,6 +35,31 @@ func (s *testSchema) SortableFields() []string {
 	return []string{"age", "name"}
 }
 
+func (s *testSchema) FieldEnums() map[string][]string {
+	return nil
+}
+
+// testSchemaWithEnums implements FieldSchema with enum values
+type testSchemaWithEnums struct{}
+
+func (s *testSchemaWithEnums) FilterOperators() map[string][]string {
+	return map[string][]string{
+		"status": {"eq", "ne"},
+		"level":  {"in"},
+	}
+}
+
+func (s *testSchemaWithEnums) SortableFields() []string {
+	return []string{"status"}
+}
+
+func (s *testSchemaWithEnums) FieldEnums() map[string][]string {
+	return map[string][]string{
+		"status": {"pending", "processing", "completed", "failed"},
+		"level":  {"info", "warn", "error"},
+	}
+}
+
 func TestWithSwaggerOptions(t *testing.T) {
 	handler := func(c echo.Context) error { return nil }
 
@@ -348,6 +373,20 @@ func TestWithFilterParamsFromSchema(t *testing.T) {
 			wantArrayOps:  []string{"age_between"},
 			wantDescRegex: `Filter by (age|name)`,
 		},
+		{
+			name:   "field operators with enums",
+			schema: &testSchemaWithEnums{},
+			wantParams: []string{
+				"status_eq",
+				"status_ne",
+				"level_in",
+				"filters[status][eq]",
+				"filters[status][ne]",
+				"filters[level][in]",
+			},
+			wantArrayOps:  []string{"level_in"},
+			wantDescRegex: `Filter by (status|level)`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -382,8 +421,42 @@ func TestWithFilterParamsFromSchema(t *testing.T) {
 					assert.Contains(t, param, "[", "complex format param should contain brackets")
 					assert.Contains(t, param, "]", "complex format param should contain brackets")
 				}
-
 			}
+
+			// Verify enum values appear in schema for enum-bearing fields
+			if tt.name == "field operators with enums" {
+				// Single-value param (status_eq) should have enum
+				statusEqSchema := def.Querystring["status_eq"].Schema.Value
+				statusMap, ok := statusEqSchema.(map[string]any)
+				require.True(t, ok, "expected map schema for status_eq")
+				assert.Equal(t, "string", statusMap["type"])
+				assert.ElementsMatch(t, []string{"pending", "processing", "completed", "failed"}, statusMap["enum"])
+
+				// Complex format param (filters[status][eq]) should have enum
+				complexSchema := def.Querystring["filters[status][eq]"].Schema.Value
+				complexMap, ok := complexSchema.(map[string]any)
+				require.True(t, ok, "expected map schema for filters[status][eq]")
+				assert.ElementsMatch(t, []string{"pending", "processing", "completed", "failed"}, complexMap["enum"])
+
+				// Array param (level_in) should have enum in items
+				levelInSchema := def.Querystring["level_in"].Schema.Value
+				levelMap, ok := levelInSchema.(map[string]any)
+				require.True(t, ok, "expected map schema for level_in")
+				items, ok := levelMap["items"].(map[string]any)
+				require.True(t, ok, "expected items map for level_in")
+				assert.ElementsMatch(t, []string{"info", "warn", "error"}, items["enum"])
+
+				// Complex format array+enum param (filters[level][in]) should be
+				// an array schema with enum in items, not a string+enum
+				complexArraySchema := def.Querystring["filters[level][in]"].Schema.Value
+				complexArrayMap, ok := complexArraySchema.(map[string]any)
+				require.True(t, ok, "expected map schema for filters[level][in]")
+				assert.Equal(t, "array", complexArrayMap["type"],
+					"filters[level][in] should be array type for multi-value operator")
+				complexItems, ok := complexArrayMap["items"].(map[string]any)
+				require.True(t, ok, "expected items map for filters[level][in]")
+				assert.ElementsMatch(t, []string{"info", "warn", "error"}, complexItems["enum"])
+				}
 		})
 	}
 }

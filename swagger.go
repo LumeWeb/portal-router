@@ -23,6 +23,7 @@ type SwaggerOption func(*swagger.Definitions, string)
 type FieldSchema interface {
 	SortableFields() []string
 	FilterOperators() map[string][]string // field -> []operator
+	FieldEnums() map[string][]string     // field -> []enum values (optional, may return nil)
 }
 
 // SchemaProvider defines an interface for providing schema information
@@ -571,7 +572,9 @@ func WithFilterParam(name, description string, schemaValue any) SwaggerOption {
 func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 	return func(d *swagger.Definitions, accessRole string) {
 		operators := schema.FilterOperators()
+		enums := schema.FieldEnums()
 		for fieldName, ops := range operators {
+			fieldEnum, hasEnum := enums[fieldName]
 			for _, op := range ops {
 				// Validate operator string
 				if _, exists := operatorDocs[op]; !exists {
@@ -588,28 +591,57 @@ func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 
 				if isArrayOp {
 					// Array parameter schema
+					itemsSchema := map[string]interface{}{
+						"type": "string", // Will be converted by parser
+					}
+					if hasEnum {
+						itemsSchema["enum"] = fieldEnum
+					}
 					*d = SwaggerFilterParam(*d, simpleParam, paramDesc,
 						map[string]interface{}{
-							"type": "array",
-							"items": map[string]interface{}{
-								"type": "string", // Will be converted by parser
-							},
-							"style":              "form",
-							"explode":            false,
-							"x-csv":              true,
+							"type":              "array",
+							"items":             itemsSchema,
+							"style":             "form",
+							"explode":           false,
+							"x-csv":             true,
 							"x-collectionFormat": "multi",
 						})
 				} else {
 					// Single value parameter
-					*d = SwaggerFilterParam(*d, simpleParam, paramDesc, "")
+					schemaValue := any("")
+					if hasEnum {
+						schemaValue = map[string]any{
+							"type": "string",
+							"enum": fieldEnum,
+						}
+					}
+					*d = SwaggerFilterParam(*d, simpleParam, paramDesc, schemaValue)
 				}
 
 				// Add complex format param
+				complexSchemaValue := any("")
+				if hasEnum {
+					if isArrayOp {
+						complexSchemaValue = map[string]any{
+							"type":              "array",
+							"items":             map[string]any{"type": "string", "enum": fieldEnum},
+							"style":             "form",
+							"explode":           false,
+							"x-csv":             true,
+							"x-collectionFormat": "multi",
+						}
+					} else {
+						complexSchemaValue = map[string]any{
+							"type": "string",
+							"enum": fieldEnum,
+						}
+					}
+				}
 				complexParam := fmt.Sprintf("filters[%s][%s]", fieldName, op)
 				*d = SwaggerFilterParam(*d, complexParam,
 					fmt.Sprintf("Filter by %s %s",
 						fieldName, strings.ToLower(op)),
-					"")
+					complexSchemaValue)
 			}
 		}
 	}
