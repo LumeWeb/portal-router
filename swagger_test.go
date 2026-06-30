@@ -445,7 +445,18 @@ func TestWithFilterParamsFromSchema(t *testing.T) {
 				items, ok := levelMap["items"].(map[string]any)
 				require.True(t, ok, "expected items map for level_in")
 				assert.ElementsMatch(t, []string{"info", "warn", "error"}, items["enum"])
-			}
+
+				// Complex format array+enum param (filters[level][in]) should be
+				// an array schema with enum in items, not a string+enum
+				complexArraySchema := def.Querystring["filters[level][in]"].Schema.Value
+				complexArrayMap, ok := complexArraySchema.(map[string]any)
+				require.True(t, ok, "expected map schema for filters[level][in]")
+				assert.Equal(t, "array", complexArrayMap["type"],
+					"filters[level][in] should be array type for multi-value operator")
+				complexItems, ok := complexArrayMap["items"].(map[string]any)
+				require.True(t, ok, "expected items map for filters[level][in]")
+				assert.ElementsMatch(t, []string{"info", "warn", "error"}, complexItems["enum"])
+				}
 		})
 	}
 }

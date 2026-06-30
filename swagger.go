@@ -621,9 +621,20 @@ func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 				// Add complex format param
 				complexSchemaValue := any("")
 				if hasEnum {
-					complexSchemaValue = map[string]any{
-						"type": "string",
-						"enum": fieldEnum,
+					if isArrayOp {
+						complexSchemaValue = map[string]any{
+							"type":              "array",
+							"items":             map[string]any{"type": "string", "enum": fieldEnum},
+							"style":             "form",
+							"explode":           false,
+							"x-csv":             true,
+							"x-collectionFormat": "multi",
+						}
+					} else {
+						complexSchemaValue = map[string]any{
+							"type": "string",
+							"enum": fieldEnum,
+						}
 					}
 				}
 				complexParam := fmt.Sprintf("filters[%s][%s]", fieldName, op)
