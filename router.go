@@ -199,7 +199,13 @@ func (s bufferingJSONSerializer) Serialize(c echo.Context, i interface{}, indent
 		}
 		return err
 	}
-	return c.Blob(http.StatusOK, echo.MIMEApplicationJSONCharsetUTF8, buf.Bytes())
+	// Preserve the status code already set by the handler (e.g., 401, 403).
+	// If none was set, Response().Status defaults to http.StatusOK.
+	code := c.Response().Status
+	if code == 0 {
+		code = http.StatusOK
+	}
+	return c.Blob(code, echo.MIMEApplicationJSONCharsetUTF8, buf.Bytes())
 }
 
 // RouterConfig holds configuration for router initialization
