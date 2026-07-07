@@ -80,11 +80,11 @@ func TestRegisterRoutes(t *testing.T) {
 			if tt.wantAccessReg || tt.accessSvcErr != nil {
 				// If access registration is expected OR an access service error is expected,
 				// set up the mock to be called and return the specified error.
-				accessSvc.On("RegisterRoute", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				accessSvc.On("RegisterRoute", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(tt.accessSvcErr).Once()
 			} else {
 				// Otherwise, assert that RegisterRoute is not called.
-				accessSvc.AssertNotCalled(t, "RegisterRoute", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+				accessSvc.AssertNotCalled(t, "RegisterRoute", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 			}
 
 			err = RegisterRoutes(eRouter, accessSvc, "test", tt.routes)
@@ -264,7 +264,7 @@ func TestSwaggerDocsServed(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			name:     "YAML docs", 
+			name:     "YAML docs",
 			path:     "/custom/docs.yaml",
 			wantCode: http.StatusOK,
 		},
@@ -470,4 +470,3 @@ func TestWithSwagger(t *testing.T) {
 	_, err = router.AddRoute(route.Method, route.Path, route.Handler, route.Swagger)
 	assert.NoError(t, err)
 }
-
