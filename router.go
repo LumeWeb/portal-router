@@ -1,7 +1,10 @@
 package router
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -82,6 +85,10 @@ func NewSwaggerRouter(info APIInfoDefinition, opts ...RouterOption) (Router, err
 		// Trusted proxy assumption: service should be behind reverse proxy like nginx/Cloudflare
 		// Do not expose service directly to untrusted networks
 		e.IPExtractor = echo.ExtractIPFromXFFHeader()
+		// Buffer JSON responses so Content-Length is set. Without it,
+		// Go's http.Server uses Transfer-Encoding: chunked, which prevents
+		// upstream reverse proxies from reusing TCP connections.
+		e.JSONSerializer = bufferingJSONSerializer{}
 		return e
 	}
 
@@ -138,6 +145,61 @@ func UpdateRouterInfo(r Router, info APIInfoDefinition) {
 
 	// Update the router's info
 	r.SetInfo(openapiInfo)
+}
+
+// maxJSONBufferSize is the upper limit for buffering JSON responses in memory.
+// Responses exceeding this fall back to streaming (chunked encoding).
+// Portal API responses are typically <100KB; 1MB is a generous safety margin.
+const maxJSONBufferSize = 1 << 20 // 1MB
+
+// errJSONResponseTooLarge is returned by the limiting writer when the JSON
+// encoded size exceeds maxJSONBufferSize. It signals the serializer to fall
+// back to streaming rather than buffering.
+var errJSONResponseTooLarge = errors.New("json response exceeds buffer limit")
+
+// limitedBuffer is a bytes.Buffer wrapper that returns errJSONResponseTooLarge
+// once the written data exceeds the limit, preventing the full payload from
+// being buffered in memory.
+type limitedBuffer struct {
+	bytes.Buffer
+	limit int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.Buffer.Len()+len(p) > b.limit {
+		// Write up to the limit so the caller can inspect partial data if needed
+		n := b.limit - b.Buffer.Len()
+		if n > 0 {
+			b.Buffer.Write(p[:n])
+		}
+		return n, errJSONResponseTooLarge
+	}
+	return b.Buffer.Write(p)
+}
+
+// bufferingJSONSerializer buffers JSON responses before writing them to the
+// ResponseWriter, ensuring Content-Length is set. Without Content-Length, Go's
+// http.Server falls back to Transfer-Encoding: chunked, which prevents reverse
+// proxies from reusing TCP connections (they never call tryPutIdleConn).
+// Responses exceeding maxJSONBufferSize fall back to the default streaming
+// serializer to avoid unbounded memory usage under concurrent load.
+type bufferingJSONSerializer struct {
+	echo.DefaultJSONSerializer
+}
+
+func (s bufferingJSONSerializer) Serialize(c echo.Context, i interface{}, indent string) error {
+	buf := limitedBuffer{limit: maxJSONBufferSize}
+	enc := json.NewEncoder(&buf)
+	if indent != "" {
+		enc.SetIndent("", indent)
+	}
+	if err := enc.Encode(i); err != nil {
+		if errors.Is(err, errJSONResponseTooLarge) {
+			return s.DefaultJSONSerializer.Serialize(c, i, indent)
+		}
+		return err
+	}
+	return c.Blob(http.StatusOK, echo.MIMEApplicationJSONCharsetUTF8, buf.Bytes())
 }
 
 // RouterConfig holds configuration for router initialization
