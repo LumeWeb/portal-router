@@ -401,7 +401,7 @@ func DefineSwaggerErrorResponse(status int, errValue interface{}) map[int]swagge
 		schema = ErrorResponse{Detail: ErrorDetail{Reason: v}}
 	case ResponseError:
 		errorMsg = v.Error()
-		schema = v
+		schema = ErrorResponse{Detail: ErrorDetail{Reason: errorMsg}}
 	case ErrorResponse:
 		errorMsg = v.Error()
 		schema = v
