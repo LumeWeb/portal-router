@@ -1,38 +1,25 @@
 package router
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestResponseErrorInterface(t *testing.T) {
-	t.Run("ErrorWrapper implements ResponseError", func(t *testing.T) {
-		err := &ErrorWrapper{
-			Message: "test error",
-			Status:  http.StatusBadRequest,
+	t.Run("ErrorResponse implements ResponseError", func(t *testing.T) {
+		err := ErrorResponse{
+			Detail: ErrorDetail{Reason: "test error"},
 		}
 
 		assert.Implements(t, (*ResponseError)(nil), err)
 		assert.Equal(t, "test error", err.Error())
-		assert.Equal(t, http.StatusBadRequest, err.HttpStatus())
-	})
-
-	t.Run("ErrorWrapper implements error", func(t *testing.T) {
-		err := &ErrorWrapper{
-			Message: "test error",
-			Status:  http.StatusBadRequest,
-		}
-
-		var e error = err
-		assert.Equal(t, "test error", e.Error())
 	})
 }
 
 // customError implements ErrorResponder with custom headers
 type customError struct {
-	ErrorWrapper
+	ErrorResponse
 	headers map[string]string
 }
 
@@ -43,19 +30,16 @@ func (e *customError) Headers() map[string]string {
 func TestErrorResponderInterface(t *testing.T) {
 	t.Run("custom error with headers", func(t *testing.T) {
 		err := &customError{
-			ErrorWrapper: ErrorWrapper{
-				Message: "custom error",
-				Status:  http.StatusConflict,
+			ErrorResponse: ErrorResponse{
+				Detail: ErrorDetail{Reason: "custom error"},
 			},
 			headers: map[string]string{
 				"X-Custom": "value",
 			},
 		}
 
-		// Test ErrorResponder interface implementation
 		var responder ErrorResponder = err
 		assert.Equal(t, "custom error", responder.Error())
-		assert.Equal(t, http.StatusConflict, responder.HttpStatus())
 		assert.Equal(t, map[string]string{"X-Custom": "value"}, responder.Headers())
 	})
 }
@@ -68,24 +52,22 @@ func TestAsErrorResponse(t *testing.T) {
 	}{
 		{
 			name: "ResponseError implementation",
-			input: &ErrorWrapper{
-				Message: "custom error",
-				Status:  http.StatusBadRequest,
+			input: ErrorResponse{
+				Detail: ErrorDetail{Reason: "custom error"},
 			},
-			expected: &ErrorWrapper{
-				Message: "custom error",
-				Status:  http.StatusBadRequest,
+			expected: ErrorResponse{
+				Detail: ErrorDetail{Reason: "custom error"},
 			},
 		},
 		{
 			name:     "standard error",
 			input:    assert.AnError,
-			expected: ErrorResponse{Message: assert.AnError.Error()},
+			expected: ErrorResponse{Detail: ErrorDetail{Reason: assert.AnError.Error()}},
 		},
 		{
 			name:     "nil error",
 			input:    nil,
-			expected: ErrorResponse{Message: ""},
+			expected: ErrorResponse{Detail: ErrorDetail{Reason: ""}},
 		},
 	}
 
@@ -101,12 +83,12 @@ func TestBadRequestResponse(t *testing.T) {
 	resp := badRequestResponse()
 	assert.Equal(t, "Bad Request", resp.Description)
 	assert.NotNil(t, resp.Content[MediaTypeJSON])
-	assert.Equal(t, "Bad Request", resp.Content[MediaTypeJSON].Value.(ErrorResponse).Message)
+	assert.Equal(t, "Bad Request", resp.Content[MediaTypeJSON].Value.(ErrorResponse).Detail.Reason)
 }
 
 func TestUnauthorizedResponse(t *testing.T) {
 	resp := unauthorizedResponse()
 	assert.Equal(t, "Unauthorized", resp.Description)
 	assert.NotNil(t, resp.Content[MediaTypeJSON])
-	assert.Equal(t, "Unauthorized", resp.Content[MediaTypeJSON].Value.(ErrorResponse).Message)
+	assert.Equal(t, "Unauthorized", resp.Content[MediaTypeJSON].Value.(ErrorResponse).Detail.Reason)
 }
