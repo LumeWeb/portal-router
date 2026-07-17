@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	errors "errors"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/invopop/jsonschema"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -456,7 +457,7 @@ func TestWithFilterParamsFromSchema(t *testing.T) {
 				complexItems, ok := complexArrayMap["items"].(map[string]any)
 				require.True(t, ok, "expected items map for filters[level][in]")
 				assert.ElementsMatch(t, []string{"info", "warn", "error"}, complexItems["enum"])
-				}
+			}
 		})
 	}
 }
@@ -710,7 +711,7 @@ func TestDefineSwaggerErrorResponse(t *testing.T) {
 			expectedError:  "Bad request details",
 		},
 		{
-			name:   "ResponseError implementation",
+			name:   "ErrorResponse implementation",
 			status: http.StatusForbidden,
 			error: ErrorResponse{
 				Detail: ErrorDetail{Reason: "custom forbidden error"},
@@ -735,15 +736,88 @@ func TestDefineSwaggerErrorResponse(t *testing.T) {
 			content := resp[tt.expectedStatus].Content[MediaTypeJSON]
 			assert.NotNil(t, content)
 
-			switch v := content.Value.(type) {
-			case ErrorResponse:
-				assert.Equal(t, tt.expectedError, v.Error())
-			case ResponseError:
-				assert.Equal(t, tt.expectedError, v.Error())
-			default:
-				t.Errorf("unexpected response type: %T", v)
-			}
+			// All branches must produce ErrorResponse — never a raw ResponseError
+			// or other type with interface/slice fields that break OpenAPI3 schema generation.
+			er, ok := content.Value.(ErrorResponse)
+			require.True(t, ok, "expected ErrorResponse, got %T", content.Value)
+			assert.Equal(t, tt.expectedError, er.Error())
 		})
+	}
+}
+
+// mockResponseError simulates a type like core.Error that implements ResponseError
+// but has interface and slice fields that produce invalid OpenAPI3 schemas
+// (e.g. "items": true, "Err": true) when reflected directly.
+type mockResponseError struct {
+	Err  error
+	Args []any
+	Msg  string
+}
+
+func (e *mockResponseError) Error() string   { return e.Msg }
+func (e *mockResponseError) HttpStatus() int { return http.StatusBadRequest }
+
+// TestDefineSwaggerErrorResponse_ResponseErrorSchema verifies that passing a
+// ResponseError with interface/slice fields produces a valid OpenAPI3 schema.
+// This is a regression test for the bug where DefineSwaggerErrorResponse passed
+// the raw ResponseError to the schema reflector, causing:
+//
+//	json: cannot unmarshal bool into field Schema.items of type openapi3.Schema
+func TestDefineSwaggerErrorResponse_ResponseErrorSchema(t *testing.T) {
+	rerr := &mockResponseError{
+		Err:  errors.New("inner error"),
+		Args: []any{"arg1", 42},
+		Msg:  "outer error",
+	}
+
+	resp := DefineSwaggerErrorResponse(http.StatusBadRequest, rerr)
+	content := resp[http.StatusBadRequest].Content[MediaTypeJSON]
+
+	// The schema Value must be ErrorResponse, not the raw mockResponseError.
+	er, ok := content.Value.(ErrorResponse)
+	require.True(t, ok, "expected ErrorResponse, got %T", content.Value)
+	assert.Equal(t, "outer error", er.Error())
+
+	// The schema must be reflectable into OpenAPI3 without errors.
+	// We simulate what gswagger does: jsonschema reflection → JSON → openapi3.UnmarshalJSON.
+	reflector := jsonschema.Reflector{Anonymous: true}
+	schema := reflector.Reflect(content.Value)
+	schema.Version = ""
+
+	for name, def := range schema.Definitions {
+		defData, err := json.Marshal(def)
+		require.NoError(t, err, "failed to marshal definition %q", name)
+
+		// Strip JSON Schema-only fields for OpenAPI 3.0 compatibility
+		var defMap map[string]any
+		require.NoError(t, json.Unmarshal(defData, &defMap), "failed to unmarshal definition %q", name)
+		stripJSONSchemaOnlyFields(defMap)
+
+		defData, err = json.Marshal(defMap)
+		require.NoError(t, err, "failed to re-marshal cleaned definition %q", name)
+
+		oasSchema := openapi3.NewSchema()
+		err = oasSchema.UnmarshalJSON(defData)
+		require.NoError(t, err, "definition %q failed to unmarshal into openapi3.Schema", name)
+	}
+}
+
+// stripJSONSchemaOnlyFields removes JSON Schema-only fields that are not valid
+// in OpenAPI 3.0 schemas. Mirrors gswagger's internal implementation.
+func stripJSONSchemaOnlyFields(v any) {
+	switch m := v.(type) {
+	case map[string]any:
+		delete(m, "contentEncoding")
+		delete(m, "contentMediaType")
+		delete(m, "contentSchema")
+		delete(m, "$defs")
+		for _, v2 := range m {
+			stripJSONSchemaOnlyFields(v2)
+		}
+	case []any:
+		for _, v2 := range m {
+			stripJSONSchemaOnlyFields(v2)
+		}
 	}
 }
 func TestMergeResponses(t *testing.T) {
