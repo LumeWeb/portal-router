@@ -59,7 +59,7 @@ func defaultSuccessResponse() swagger.ContentValue {
 		Description: "Success",
 		Content: swagger.Content{
 			MediaTypeJSON: {
-				Value: ErrorResponse{Message: ""}, // Empty message indicates success
+				Value: ErrorResponse{Detail: ErrorDetail{Reason: ""}}, // Empty message indicates success
 			},
 		},
 	}
@@ -71,7 +71,7 @@ func badRequestResponse() swagger.ContentValue {
 		Description: "Bad Request",
 		Content: swagger.Content{
 			MediaTypeJSON: {
-				Value: ErrorResponse{Message: "Bad Request"},
+				Value: ErrorResponse{Detail: ErrorDetail{Reason: "Bad Request"}},
 			},
 		},
 	}
@@ -83,7 +83,7 @@ func unauthorizedResponse() swagger.ContentValue {
 		Description: "Unauthorized",
 		Content: swagger.Content{
 			MediaTypeJSON: {
-				Value: ErrorResponse{Message: "Unauthorized"},
+				Value: ErrorResponse{Detail: ErrorDetail{Reason: "Unauthorized"}},
 			},
 		},
 	}
@@ -95,7 +95,7 @@ func forbiddenResponse() swagger.ContentValue {
 		Description: "Forbidden",
 		Content: swagger.Content{
 			MediaTypeJSON: {
-				Value: ErrorResponse{Message: "Forbidden"},
+				Value: ErrorResponse{Detail: ErrorDetail{Reason: "Forbidden"}},
 			},
 		},
 	}
@@ -107,7 +107,7 @@ func notFoundResponse() swagger.ContentValue {
 		Description: "Not Found",
 		Content: swagger.Content{
 			MediaTypeJSON: {
-				Value: ErrorResponse{Message: "Not Found"},
+				Value: ErrorResponse{Detail: ErrorDetail{Reason: "Not Found"}},
 			},
 		},
 	}
@@ -119,7 +119,7 @@ func validationFailedResponse() swagger.ContentValue {
 		Description: "Validation Failed",
 		Content: swagger.Content{
 			MediaTypeJSON: {
-				Value: ErrorResponse{Message: "Validation Failed"},
+				Value: ErrorResponse{Detail: ErrorDetail{Reason: "Validation Failed"}},
 			},
 		},
 	}
@@ -167,7 +167,7 @@ func internalServerErrorResponse() swagger.ContentValue {
 		Description: "Internal Server Error",
 		Content: swagger.Content{
 			MediaTypeJSON: {
-				Value: ErrorResponse{Message: "Internal Server Error"},
+				Value: ErrorResponse{Detail: ErrorDetail{Reason: "Internal Server Error"}},
 			},
 		},
 	}

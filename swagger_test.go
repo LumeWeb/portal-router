@@ -712,9 +712,8 @@ func TestDefineSwaggerErrorResponse(t *testing.T) {
 		{
 			name:   "ResponseError implementation",
 			status: http.StatusForbidden,
-			error: &ErrorWrapper{
-				Message: "custom forbidden error",
-				Status:  http.StatusForbidden,
+			error: ErrorResponse{
+				Detail: ErrorDetail{Reason: "custom forbidden error"},
 			},
 			expectedStatus: http.StatusForbidden,
 			expectedError:  "custom forbidden error",
@@ -903,7 +902,7 @@ func TestWithErrorResponses(t *testing.T) {
 					Description: "Validation failed",
 					Content: map[string]swagger.Schema{
 						MediaTypeJSON: {
-							Value: ErrorResponse{Message: "Validation failed"},
+							Value: ErrorResponse{Detail: ErrorDetail{Reason: "Validation failed"}},
 						},
 					},
 				},
@@ -911,7 +910,7 @@ func TestWithErrorResponses(t *testing.T) {
 					Description: "Too many requests",
 					Content: map[string]swagger.Schema{
 						MediaTypeJSON: {
-							Value: ErrorResponse{Message: "Too many requests"},
+							Value: ErrorResponse{Detail: ErrorDetail{Reason: "Too many requests"}},
 						},
 					},
 				},
@@ -926,7 +925,7 @@ func TestWithErrorResponses(t *testing.T) {
 					Description: "Conflict",
 					Content: map[string]swagger.Schema{
 						MediaTypeJSON: {
-							Value: ErrorResponse{Message: "Conflict"},
+							Value: ErrorResponse{Detail: ErrorDetail{Reason: "Conflict"}},
 						},
 					},
 				},
@@ -934,7 +933,7 @@ func TestWithErrorResponses(t *testing.T) {
 					Description: "Service unavailable",
 					Content: map[string]swagger.Schema{
 						MediaTypeJSON: {
-							Value: ErrorResponse{Message: "Service unavailable"},
+							Value: ErrorResponse{Detail: ErrorDetail{Reason: "Service unavailable"}},
 						},
 					},
 				},
@@ -990,7 +989,7 @@ func TestSuccessResponsePreservation(t *testing.T) {
 						Description: "Error",
 						Content: map[string]swagger.Schema{
 							MediaTypeJSON: {
-								Value: ErrorResponse{Message: "Error"},
+								Value: ErrorResponse{Detail: ErrorDetail{Reason: "Error"}},
 							},
 						},
 					},
@@ -1001,7 +1000,7 @@ func TestSuccessResponsePreservation(t *testing.T) {
 						Description: "Error",
 						Content: map[string]swagger.Schema{
 							MediaTypeJSON: {
-								Value: ErrorResponse{Message: "Error"},
+								Value: ErrorResponse{Detail: ErrorDetail{Reason: "Error"}},
 							},
 						},
 					},

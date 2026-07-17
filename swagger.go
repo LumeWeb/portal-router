@@ -251,17 +251,26 @@ type ResponseError interface {
 	HttpStatus() int
 }
 
-// ErrorResponse is the default error response format for simple errors
+// ErrorDetail is the structured error detail format used in API error responses.
+type ErrorDetail struct {
+	Reason  string `json:"reason"`
+	Details string `json:"details,omitempty"`
+}
+
+// ErrorResponse is the canonical error response format matching core.Error.MarshalJSON:
+// {"error":{"reason":"...","details":"..."}}
 type ErrorResponse struct {
-	Message string `json:"error"`
+	Detail ErrorDetail `json:"error"`
 }
 
 func (e ErrorResponse) Error() string {
-	return e.Message
+	if e.Detail.Details != "" {
+		return e.Detail.Details
+	}
+	return e.Detail.Reason
 }
 
 func (e ErrorResponse) HttpStatus() int {
-	// Default to 500 if not set
 	return http.StatusInternalServerError
 }
 
@@ -270,15 +279,6 @@ type ErrorResponder interface {
 	ResponseError
 	Headers() map[string]string
 }
-
-// ErrorWrapper is a helper to implement ResponseError for simple errors
-type ErrorWrapper struct {
-	Message string
-	Status  int
-}
-
-func (e *ErrorWrapper) Error() string   { return e.Message }
-func (e *ErrorWrapper) HttpStatus() int { return e.Status }
 
 // WithContent creates a ResponseOption that sets the response content
 func WithContent(mediaType string, schema interface{}) ResponseOption {
@@ -389,12 +389,8 @@ func WithPaginatedResponse(itemType interface{}, paginationMeta interface{}) Swa
 	)
 }
 
-// DefineSwaggerErrorResponse creates a Swagger-compatible error response definition.
-// Supports:
-// - string messages
-// - error interface
-// - ResponseError implementations
-// - ErrorResponse struct
+// DefineSwaggerErrorResponse creates a Swagger-compatible error response definition
+// using the canonical object shape: {"error":{"reason":"...","details":"..."}}.
 func DefineSwaggerErrorResponse(status int, errValue interface{}) map[int]swagger.ContentValue {
 	var errorMsg string
 	var schema interface{}
@@ -402,21 +398,23 @@ func DefineSwaggerErrorResponse(status int, errValue interface{}) map[int]swagge
 	switch v := errValue.(type) {
 	case string:
 		errorMsg = v
-		schema = ErrorResponse{Message: v}
+		schema = ErrorResponse{Detail: ErrorDetail{Reason: v}}
 	case ResponseError:
 		errorMsg = v.Error()
 		schema = v
 	case ErrorResponse:
-		errorMsg = v.Message
+		errorMsg = v.Error()
 		schema = v
+	case ErrorDetail:
+		errorMsg = v.Reason
+		schema = ErrorResponse{Detail: v}
 	default:
-		// Handle any other type including error interface
 		if err, ok := errValue.(error); ok {
 			errorMsg = err.Error()
-			schema = ErrorResponse{Message: errorMsg}
+			schema = ErrorResponse{Detail: ErrorDetail{Reason: errorMsg}}
 		} else {
 			errorMsg = fmt.Sprintf("%v", errValue)
-			schema = ErrorResponse{Message: errorMsg}
+			schema = ErrorResponse{Detail: ErrorDetail{Reason: errorMsg}}
 		}
 	}
 
@@ -432,15 +430,15 @@ func DefineSwaggerErrorResponse(status int, errValue interface{}) map[int]swagge
 	}
 }
 
-// AsErrorResponse converts an error to a response object
+// AsErrorResponse converts an error to a response object.
 func AsErrorResponse(err error) interface{} {
 	if err == nil {
-		return ErrorResponse{Message: ""}
+		return ErrorResponse{Detail: ErrorDetail{Reason: ""}}
 	}
 	if respErr, ok := err.(ResponseError); ok {
 		return respErr
 	}
-	return ErrorResponse{Message: err.Error()}
+	return ErrorResponse{Detail: ErrorDetail{Reason: err.Error()}}
 }
 
 // MergeResponses combines multiple response maps while preserving success responses (2xx).
