@@ -912,8 +912,9 @@ func TestMergeResponses(t *testing.T) {
 func TestDefaultCoreErrorResponses(t *testing.T) {
 	core := DefaultCoreErrorResponses()
 
-	assert.Len(t, core, 3)
+	assert.Len(t, core, 4)
 	assert.Contains(t, core, http.StatusBadRequest)
+	assert.Contains(t, core, http.StatusUnprocessableEntity)
 	assert.Contains(t, core, http.StatusNotFound)
 	assert.Contains(t, core, http.StatusInternalServerError)
 	assert.NotContains(t, core, http.StatusUnauthorized)
@@ -923,8 +924,9 @@ func TestDefaultCoreErrorResponses(t *testing.T) {
 func TestDefaultPublicErrorResponses(t *testing.T) {
 	defaults := DefaultPublicErrorResponses()
 
-	assert.Len(t, defaults, 3)
+	assert.Len(t, defaults, 4)
 	assert.Contains(t, defaults, http.StatusBadRequest)
+	assert.Contains(t, defaults, http.StatusUnprocessableEntity)
 	assert.Contains(t, defaults, http.StatusNotFound)
 	assert.Contains(t, defaults, http.StatusInternalServerError)
 	assert.NotContains(t, defaults, http.StatusUnauthorized)
@@ -934,8 +936,9 @@ func TestDefaultPublicErrorResponses(t *testing.T) {
 func TestDefaultAuthErrorResponses(t *testing.T) {
 	defaults := DefaultAuthErrorResponses()
 
-	assert.Len(t, defaults, 5)
+	assert.Len(t, defaults, 6)
 	assert.Contains(t, defaults, http.StatusBadRequest)
+	assert.Contains(t, defaults, http.StatusUnprocessableEntity)
 	assert.Contains(t, defaults, http.StatusUnauthorized)
 	assert.Contains(t, defaults, http.StatusForbidden)
 	assert.Contains(t, defaults, http.StatusNotFound)
@@ -1012,7 +1015,7 @@ func TestWithErrorResponses(t *testing.T) {
 					},
 				},
 			},
-			expectedCodes: []int{200, 400, 401, 403, 404, 409, 500, 503},
+			expectedCodes: []int{200, 400, 401, 403, 404, 409, 422, 500, 503},
 		},
 	}
 
