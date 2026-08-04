@@ -23,7 +23,7 @@ type SwaggerOption func(*swagger.Definitions, string)
 type FieldSchema interface {
 	SortableFields() []string
 	FilterOperators() map[string][]string // field -> []operator
-	FieldEnums() map[string][]string     // field -> []enum values (optional, may return nil)
+	FieldEnums() map[string][]string      // field -> []enum values (optional, may return nil)
 }
 
 // SchemaProvider defines an interface for providing schema information
@@ -471,23 +471,24 @@ func DefineSwaggerErrorResponses(responses ...map[int]swagger.ContentValue) map[
 	return MergeResponses(responses...)
 }
 
-// DefaultCoreErrorResponses returns a map containing core HTTP error responses shared by all routes (400, 404, 500).
+// DefaultCoreErrorResponses returns a map containing core HTTP error responses shared by all routes (400, 404, 422, 500).
 func DefaultCoreErrorResponses() map[int]swagger.ContentValue {
 	return DefineSwaggerErrorResponses(
 		DefineSwaggerErrorResponse(http.StatusBadRequest, "Bad request"),
+		DefineSwaggerErrorResponse(http.StatusUnprocessableEntity, "Validation failed"),
 		DefineSwaggerErrorResponse(http.StatusNotFound, "Not found"),
 		DefineSwaggerErrorResponse(http.StatusInternalServerError, "Internal server error"),
 	)
 }
 
 // DefaultPublicErrorResponses returns a map containing common HTTP error responses for public routes.
-// Includes core errors (400, 404, 500).
+// Includes core errors (400, 404, 422, 500).
 func DefaultPublicErrorResponses() map[int]swagger.ContentValue {
 	return DefaultCoreErrorResponses()
 }
 
 // DefaultAuthErrorResponses returns a map containing common HTTP error responses for authenticated routes.
-// Includes core errors (400, 404, 500) plus auth-specific errors (401, 403).
+// Includes core errors (400, 404, 422, 500) plus auth-specific errors (401, 403).
 func DefaultAuthErrorResponses() map[int]swagger.ContentValue {
 	return DefineSwaggerErrorResponses(
 		DefaultCoreErrorResponses(),
@@ -597,11 +598,11 @@ func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 					}
 					*d = SwaggerFilterParam(*d, simpleParam, paramDesc,
 						map[string]interface{}{
-							"type":              "array",
-							"items":             itemsSchema,
-							"style":             "form",
-							"explode":           false,
-							"x-csv":             true,
+							"type":               "array",
+							"items":              itemsSchema,
+							"style":              "form",
+							"explode":            false,
+							"x-csv":              true,
 							"x-collectionFormat": "multi",
 						})
 				} else {
@@ -621,11 +622,11 @@ func WithFilterParamsFromSchema(schema FieldSchema) SwaggerOption {
 				if hasEnum {
 					if isArrayOp {
 						complexSchemaValue = map[string]any{
-							"type":              "array",
-							"items":             map[string]any{"type": "string", "enum": fieldEnum},
-							"style":             "form",
-							"explode":           false,
-							"x-csv":             true,
+							"type":               "array",
+							"items":              map[string]any{"type": "string", "enum": fieldEnum},
+							"style":              "form",
+							"explode":            false,
+							"x-csv":              true,
 							"x-collectionFormat": "multi",
 						}
 					} else {
